@@ -423,6 +423,16 @@ impl App {
                 self.cycle_environment();
             }
 
+            // Copy file path (y = yank path)
+            KeyCode::Char('y') => {
+                self.copy_current_file_path();
+            }
+
+            // Copy response (Y = yank response)
+            KeyCode::Char('Y') => {
+                self.copy_response();
+            }
+
             _ => {}
         }
 
@@ -1036,6 +1046,79 @@ impl App {
                 StatusLevel::Info,
             );
         }
+    }
+
+    /// Copy current file's relative path to clipboard
+    fn copy_current_file_path(&mut self) {
+        if let Some(path) = &self.current_file_path {
+            // Get relative path from working directory
+            let relative_path = path
+                .strip_prefix(&self.working_dir)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
+
+            match self.copy_to_clipboard(&relative_path) {
+                Ok(_) => {
+                    self.set_status(
+                        &format!("Copied path: {}", relative_path),
+                        StatusLevel::Success,
+                    );
+                }
+                Err(e) => {
+                    self.set_status(&format!("Copy failed: {}", e), StatusLevel::Error);
+                }
+            }
+        } else {
+            self.set_status("No file selected", StatusLevel::Warning);
+        }
+    }
+
+    /// Copy response body to clipboard
+    fn copy_response(&mut self) {
+        if let Some(result) = &self.execution_result {
+            if let Some(response) = &result.response {
+                let body = if response.body.is_empty() {
+                    format!("HTTP {}\n(empty body)", response.status_code)
+                } else {
+                    // Try to pretty print JSON
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response.body) {
+                        serde_json::to_string_pretty(&json).unwrap_or(response.body.clone())
+                    } else {
+                        response.body.clone()
+                    }
+                };
+
+                match self.copy_to_clipboard(&body) {
+                    Ok(_) => {
+                        let preview = if body.len() > 50 {
+                            format!("{}...", &body[..50])
+                        } else {
+                            body.clone()
+                        };
+                        self.set_status(
+                            &format!("Copied response ({} bytes)", body.len()),
+                            StatusLevel::Success,
+                        );
+                    }
+                    Err(e) => {
+                        self.set_status(&format!("Copy failed: {}", e), StatusLevel::Error);
+                    }
+                }
+            } else {
+                self.set_status("No response body available", StatusLevel::Warning);
+            }
+        } else {
+            self.set_status("No response yet. Run request first.", StatusLevel::Warning);
+        }
+    }
+
+    /// Copy text to system clipboard
+    fn copy_to_clipboard(&self, text: &str) -> Result<()> {
+        use arboard::Clipboard;
+        let mut clipboard = Clipboard::new()?;
+        clipboard.set_text(text)?;
+        Ok(())
     }
 
     /// Execute search
