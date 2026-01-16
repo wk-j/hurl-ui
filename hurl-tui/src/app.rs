@@ -209,7 +209,59 @@ impl App {
         // Load environments
         app.load_environments()?;
 
+        // Restore last opened file
+        app.restore_last_opened_file();
+
         Ok(app)
+    }
+
+    /// Get the state file path for the current working directory
+    fn get_state_file_path(&self) -> PathBuf {
+        self.working_dir.join(".hurl-tui-state.json")
+    }
+
+    /// Save the current state (last opened file)
+    fn save_state(&self) {
+        if let Some(path) = &self.current_file_path {
+            let state = serde_json::json!({
+                "last_opened_file": path.to_string_lossy(),
+                "file_tree_index": self.file_tree_index
+            });
+            
+            if let Ok(content) = serde_json::to_string_pretty(&state) {
+                let _ = std::fs::write(self.get_state_file_path(), content);
+            }
+        }
+    }
+
+    /// Restore the last opened file from state
+    fn restore_last_opened_file(&mut self) {
+        let state_path = self.get_state_file_path();
+        
+        if let Ok(content) = std::fs::read_to_string(&state_path) {
+            if let Ok(state) = serde_json::from_str::<serde_json::Value>(&content) {
+                // Restore last opened file
+                if let Some(file_path) = state.get("last_opened_file").and_then(|v| v.as_str()) {
+                    let path = PathBuf::from(file_path);
+                    if path.exists() {
+                        let _ = self.preview_file(&path);
+                        
+                        // Try to restore file tree index
+                        if let Some(index) = state.get("file_tree_index").and_then(|v| v.as_u64()) {
+                            let max = self.get_visible_file_count().saturating_sub(1);
+                            self.file_tree_index = (index as usize).min(max);
+                        }
+                        
+                        self.set_status(
+                            &format!("Restored: {}", path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default()),
+                            StatusLevel::Info
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// Check if the application should quit
@@ -811,6 +863,9 @@ impl App {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path.display().to_string());
         self.set_status(&format!("Preview: {}", file_name), StatusLevel::Info);
+
+        // Save state for next session
+        self.save_state();
 
         Ok(())
     }

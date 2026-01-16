@@ -70,3 +70,6 @@ lcov.info
 # Local configuration
 .cargo/config.toml
 !.cargo/config.toml.example
+
+# Hurl TUI state files
+.hurl-tui-state.json
