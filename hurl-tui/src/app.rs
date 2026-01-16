@@ -690,7 +690,55 @@ impl App {
     /// Refresh the file tree
     pub fn refresh_file_tree(&mut self) -> Result<()> {
         self.file_tree = Self::load_directory_children(&self.working_dir, 0)?;
+        // Auto-expand directories containing .hurl files
+        self.auto_expand_hurl_directories();
         Ok(())
+    }
+
+    /// Auto-expand directories that contain .hurl files
+    fn auto_expand_hurl_directories(&mut self) {
+        Self::expand_entries_with_hurl(&mut self.file_tree);
+    }
+
+    /// Recursively expand directory entries that contain .hurl files
+    fn expand_entries_with_hurl(entries: &mut [FileEntry]) {
+        for entry in entries.iter_mut() {
+            if entry.is_dir {
+                // Load children if not already loaded
+                if entry.children.is_empty() {
+                    if let Ok(children) = App::load_directory_children(&entry.path, entry.depth + 1) {
+                        entry.children = children;
+                    }
+                }
+                
+                // Check if this directory or its children contain .hurl files
+                let has_hurl = entry.children.iter().any(|c| {
+                    !c.is_dir || Self::dir_contains_hurl(&c.path)
+                });
+                
+                if has_hurl {
+                    entry.is_expanded = true;
+                    // Recursively expand children
+                    Self::expand_entries_with_hurl(&mut entry.children);
+                }
+            }
+        }
+    }
+
+    /// Check if a directory contains any .hurl files (recursively)
+    fn dir_contains_hurl(path: &PathBuf) -> bool {
+        if let Ok(read_dir) = std::fs::read_dir(path) {
+            for entry in read_dir.flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().map_or(false, |e| e == "hurl") {
+                    return true;
+                }
+                if path.is_dir() && Self::dir_contains_hurl(&path) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Load children of a directory
