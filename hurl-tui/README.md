@@ -4,13 +4,16 @@ A Terminal User Interface for [Hurl](https://hurl.dev/), the command-line tool f
 
 ## Features
 
-- **File Browser**: Navigate and manage `.hurl` files in a tree view
+- **File Browser**: Navigate and manage `.hurl` files in a tree view with auto-expand
+- **Auto Preview**: Automatically preview files when navigating
 - **Syntax Highlighting**: Hurl-specific syntax highlighting in the editor
 - **Request Execution**: Run Hurl requests directly from the TUI
 - **Response Viewer**: View formatted responses with JSON pretty-printing
 - **Assertions Panel**: See assertion results with pass/fail status
 - **Environment Variables**: Manage and switch between environments
 - **Vim-style Navigation**: Familiar keyboard shortcuts for efficient navigation
+- **Clipboard Support**: Copy file paths and responses to clipboard
+- **Session Restore**: Remember last opened file per directory
 
 ## Installation
 
@@ -73,6 +76,13 @@ hurl-tui /path/to/hurl/files
 | `?` | Show help |
 | `q` | Quit |
 
+### Clipboard
+
+| Key | Action |
+|-----|--------|
+| `y` | Copy file path to clipboard |
+| `Y` | Copy response to clipboard |
+
 ### Commands
 
 | Command | Action |
@@ -113,6 +123,7 @@ hurl-tui/
 │   ├── parser/          # Hurl file parsing
 │   ├── runner/          # Hurl execution
 │   └── ui/              # UI components
+├── examples/            # Sample hurl files
 ├── config/
 │   └── default.toml     # Default configuration
 └── Cargo.toml

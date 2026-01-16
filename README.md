@@ -7,13 +7,16 @@ A terminal user interface for [Hurl](https://hurl.dev/) - run and debug HTTP req
 
 ## Features
 
-- Browse and manage `.hurl` files
+- Browse and manage `.hurl` files with auto-expand
 - Syntax highlighting for Hurl format
+- Auto-preview files on navigation
 - Execute requests and view responses
 - JSON pretty-printing
 - Assertion results with pass/fail status
 - Environment variable management
 - Vim-style keyboard navigation
+- Copy file path and response to clipboard
+- Remember last opened file per directory
 
 ## Quick Start
 
@@ -24,6 +27,9 @@ cargo run
 
 # Or run in a specific directory
 cargo run -- /path/to/hurl/files
+
+# Install globally
+cargo install --path hurl-tui
 ```
 
 **Requirements:** Rust 1.75+, [Hurl](https://hurl.dev/) CLI
@@ -37,6 +43,8 @@ cargo run -- /path/to/hurl/files
 | `r` | Run request |
 | `e` | Edit mode |
 | `Tab` | Cycle panels |
+| `y` | Copy file path |
+| `Y` | Copy response |
 | `?` | Help |
 | `q` | Quit |
 
@@ -46,6 +54,7 @@ cargo run -- /path/to/hurl/files
 hurl-tui/
 ├── PROPOSAL.md    # Technical design document
 ├── README.md      # Detailed documentation
+├── examples/      # Sample hurl files
 └── src/           # Source code
 ```
 
