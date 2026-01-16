@@ -507,6 +507,7 @@ impl App {
                 let max = self.get_visible_file_count().saturating_sub(1);
                 if self.file_tree_index < max {
                     self.file_tree_index += 1;
+                    self.auto_preview_selected_file();
                 }
             }
             ActivePanel::Editor => {
@@ -528,7 +529,11 @@ impl App {
     fn navigate_up(&mut self) {
         match self.active_panel {
             ActivePanel::FileBrowser => {
+                let old_index = self.file_tree_index;
                 self.file_tree_index = self.file_tree_index.saturating_sub(1);
+                if self.file_tree_index != old_index {
+                    self.auto_preview_selected_file();
+                }
             }
             ActivePanel::Editor => {
                 self.editor_scroll = self.editor_scroll.saturating_sub(1);
@@ -776,6 +781,16 @@ impl App {
 
     /// Open a hurl file
     fn open_file(&mut self, path: &PathBuf) -> Result<()> {
+        self.open_file_internal(path, true)
+    }
+
+    /// Preview a hurl file (open without switching panel)
+    fn preview_file(&mut self, path: &PathBuf) -> Result<()> {
+        self.open_file_internal(path, false)
+    }
+
+    /// Internal file opening logic
+    fn open_file_internal(&mut self, path: &PathBuf, switch_panel: bool) -> Result<()> {
         let content = std::fs::read_to_string(path)?;
         let hurl_file = crate::parser::parse_hurl_file(&content)?;
 
@@ -788,10 +803,26 @@ impl App {
         self.response_scroll = 0;
         self.assertions_scroll = 0;
 
-        self.active_panel = ActivePanel::Editor;
-        self.set_status(&format!("Opened: {}", path.display()), StatusLevel::Info);
+        if switch_panel {
+            self.active_panel = ActivePanel::Editor;
+        }
+        
+        let file_name = path.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+        self.set_status(&format!("Preview: {}", file_name), StatusLevel::Info);
 
         Ok(())
+    }
+
+    /// Auto-preview the currently selected file in the file browser
+    fn auto_preview_selected_file(&mut self) {
+        if let Some(entry) = self.get_selected_file_entry() {
+            if !entry.is_dir && entry.path.extension().map_or(false, |e| e == "hurl") {
+                let path = entry.path.clone();
+                let _ = self.preview_file(&path);
+            }
+        }
     }
 
     /// Save the current file
