@@ -17,7 +17,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{io, path::PathBuf};
+use std::{fs::File, io::{self, Write}, path::PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::app::App;
@@ -39,8 +39,11 @@ async fn main() -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-    // Setup terminal
-    let mut terminal = setup_terminal()?;
+    // Open /dev/tty for interactive terminal (works even when stdout is piped)
+    let tty = open_tty()?;
+    
+    // Setup terminal using tty
+    let mut terminal = setup_terminal(tty)?;
 
     // Create application state
     let mut app = App::new(config, working_dir)?;
@@ -51,6 +54,9 @@ async fn main() -> Result<()> {
     // Run the application
     let result = run_app(&mut terminal, &mut app, event_handler).await;
 
+    // Get the output before restoring terminal
+    let output = app.get_output();
+
     // Restore terminal
     restore_terminal(&mut terminal)?;
 
@@ -60,7 +66,34 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }
 
+    // Print output to stdout (for piping to editors like Helix)
+    if let Some(output) = output {
+        print!("{}", output);
+    }
+
     Ok(())
+}
+
+/// Open /dev/tty for interactive terminal access
+#[cfg(unix)]
+fn open_tty() -> Result<File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let tty = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_NOCTTY)
+        .open("/dev/tty")?;
+    Ok(tty)
+}
+
+#[cfg(windows)]
+fn open_tty() -> Result<File> {
+    // On Windows, use CONIN$ and CONOUT$
+    let tty = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("CONOUT$")?;
+    Ok(tty)
 }
 
 /// Initialize the tracing subscriber for logging
@@ -76,17 +109,16 @@ fn init_logging() -> Result<()> {
 }
 
 /// Setup the terminal for TUI rendering
-fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
+fn setup_terminal(mut tty: File) -> Result<Terminal<CrosstermBackend<File>>> {
     enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
+    execute!(tty, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(tty);
     let terminal = Terminal::new(backend)?;
     Ok(terminal)
 }
 
 /// Restore the terminal to its original state
-fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<File>>) -> Result<()> {
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
@@ -99,7 +131,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Re
 
 /// Main application loop
 async fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    terminal: &mut Terminal<CrosstermBackend<File>>,
     app: &mut App,
     mut event_handler: EventHandler,
 ) -> Result<()> {

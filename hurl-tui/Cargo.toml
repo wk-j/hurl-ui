@@ -59,6 +59,10 @@ url = "2"
 # Regex for parsing
 regex = "1"
 
+# Platform-specific
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 pretty_assertions = "1"
 tempfile = "3"

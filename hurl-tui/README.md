@@ -76,13 +76,14 @@ hurl-tui /path/to/hurl/files
 | `?` | Show help |
 | `q` | Quit |
 
-### Clipboard
+### Clipboard & Output
 
 | Key | Action |
 |-----|--------|
 | `y` | Copy file path to clipboard |
 | `Y` | Copy response to clipboard |
 | `c` | Copy AI context (request + response + assertions) |
+| `o` | Output AI context to stdout and quit |
 
 ### AI Context Format
 
@@ -123,6 +124,24 @@ jsonpath "$" count > 0
 | `:w` | Save file |
 | `:q` | Quit |
 | `:wq` | Save and quit |
+
+## Helix Editor Integration
+
+Add to your `~/.config/helix/config.toml`:
+
+```toml
+[keys.normal]
+H = [
+    ":new",
+    ":insert-output hurl-tui",
+    ":buffer-close!",
+    ":redraw"
+]
+```
+
+Press `H` in Helix to open hurl-tui. Navigate to a `.hurl` file, run it with `r`, then press `o` to output the AI context to your buffer.
+
+The TUI works interactively even when stdout is piped, using `/dev/tty` for terminal access.
 
 ## Configuration
 

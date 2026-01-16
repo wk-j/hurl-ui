@@ -46,6 +46,7 @@ cargo install --path hurl-tui
 | `y` | Copy file path |
 | `Y` | Copy response |
 | `c` | Copy AI context |
+| `o` | Output to stdout & quit |
 | `?` | Help |
 | `q` | Quit |
 
