@@ -82,6 +82,7 @@ hurl-tui /path/to/hurl/files
 |-----|--------|
 | `y` | Copy file path to clipboard |
 | `Y` | Copy response to clipboard |
+| `c` | Copy AI context (request + response + assertions) |
 
 ### Commands
 

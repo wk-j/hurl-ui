@@ -45,6 +45,7 @@ cargo install --path hurl-tui
 | `Tab` | Cycle panels |
 | `y` | Copy file path |
 | `Y` | Copy response |
+| `c` | Copy AI context |
 | `?` | Help |
 | `q` | Quit |
 

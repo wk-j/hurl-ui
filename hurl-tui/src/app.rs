@@ -433,6 +433,11 @@ impl App {
                 self.copy_response();
             }
 
+            // Copy AI context (c = copy context for AI)
+            KeyCode::Char('c') => {
+                self.copy_ai_context();
+            }
+
             _ => {}
         }
 
@@ -1119,6 +1124,122 @@ impl App {
         let mut clipboard = Clipboard::new()?;
         clipboard.set_text(text)?;
         Ok(())
+    }
+
+    /// Copy full test context for AI (request + response + assertions)
+    fn copy_ai_context(&mut self) {
+        let mut context = String::new();
+
+        // Add file path
+        if let Some(path) = &self.current_file_path {
+            let relative_path = path
+                .strip_prefix(&self.working_dir)
+                .unwrap_or(path)
+                .to_string_lossy();
+            context.push_str(&format!("## Hurl Test: {}\n\n", relative_path));
+        }
+
+        // Add request (hurl file content)
+        if !self.editor_content.is_empty() {
+            context.push_str("### Request (Hurl file)\n\n```hurl\n");
+            context.push_str(&self.editor_content.join("\n"));
+            context.push_str("\n```\n\n");
+        }
+
+        // Add response
+        if let Some(result) = &self.execution_result {
+            if let Some(response) = &result.response {
+                context.push_str(&format!(
+                    "### Response\n\n**Status:** {}\n**Duration:** {}ms\n\n",
+                    response.status_code, response.duration_ms
+                ));
+
+                // Headers
+                if !response.headers.is_empty() {
+                    context.push_str("**Headers:**\n```\n");
+                    for (name, value) in &response.headers {
+                        context.push_str(&format!("{}: {}\n", name, value));
+                    }
+                    context.push_str("```\n\n");
+                }
+
+                // Body
+                if !response.body.is_empty() {
+                    context.push_str("**Body:**\n```json\n");
+                    // Try to pretty print JSON
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response.body) {
+                        if let Ok(pretty) = serde_json::to_string_pretty(&json) {
+                            context.push_str(&pretty);
+                        } else {
+                            context.push_str(&response.body);
+                        }
+                    } else {
+                        context.push_str(&response.body);
+                    }
+                    context.push_str("\n```\n\n");
+                }
+            }
+
+            // Assertions
+            if !result.assertions.is_empty() {
+                context.push_str("### Assertion Results\n\n");
+                let passed = result.assertions.iter().filter(|a| a.success).count();
+                let total = result.assertions.len();
+                context.push_str(&format!("**Summary:** {}/{} passed\n\n", passed, total));
+
+                context.push_str("| Status | Assertion |\n");
+                context.push_str("|--------|----------|\n");
+                for assertion in &result.assertions {
+                    let status = if assertion.success { "PASS" } else { "FAIL" };
+                    context.push_str(&format!("| {} | {} |\n", status, assertion.text));
+                }
+                context.push_str("\n");
+
+                // Add failure details
+                let failures: Vec<_> = result.assertions.iter().filter(|a| !a.success).collect();
+                if !failures.is_empty() {
+                    context.push_str("**Failures:**\n\n");
+                    for failure in failures {
+                        context.push_str(&format!("- `{}`\n", failure.text));
+                        if let Some(expected) = &failure.expected {
+                            context.push_str(&format!("  - Expected: {}\n", expected));
+                        }
+                        if let Some(actual) = &failure.actual {
+                            context.push_str(&format!("  - Actual: {}\n", actual));
+                        }
+                        if let Some(message) = &failure.message {
+                            context.push_str(&format!("  - Error: {}\n", message));
+                        }
+                    }
+                    context.push_str("\n");
+                }
+            }
+
+            // Overall result
+            context.push_str(&format!(
+                "### Result: {}\n",
+                if result.success { "SUCCESS" } else { "FAILED" }
+            ));
+        } else {
+            context.push_str("### Response\n\n*No response yet - request not executed*\n");
+        }
+
+        if context.is_empty() {
+            self.set_status("No context to copy", StatusLevel::Warning);
+            return;
+        }
+
+        match self.copy_to_clipboard(&context) {
+            Ok(_) => {
+                self.set_status(
+                    &format!("Copied AI context ({} bytes)", context.len()),
+                    StatusLevel::Success,
+                );
+            }
+            Err(e) => {
+                self.set_status(&format!("Copy failed: {}", e), StatusLevel::Error);
+            }
+        }
     }
 
     /// Execute search

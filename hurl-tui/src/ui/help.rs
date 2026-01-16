@@ -113,6 +113,10 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
             Span::styled("  Y               ", Style::default().fg(Color::Green)),
             Span::styled("Copy response to clipboard", Style::default().fg(Color::White)),
         ]),
+        Line::from(vec![
+            Span::styled("  c               ", Style::default().fg(Color::Green)),
+            Span::styled("Copy AI context (request+response)", Style::default().fg(Color::White)),
+        ]),
         Line::from(""),
         Line::from(Span::styled(
             "Commands (press : first)",
