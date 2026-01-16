@@ -1,0 +1,70 @@
+[package]
+name = "hurl-tui"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A Terminal User Interface for Hurl HTTP testing"
+license = "MIT"
+repository = "https://github.com/yourusername/hurl-tui"
+keywords = ["hurl", "http", "tui", "terminal", "api-testing"]
+categories = ["command-line-utilities", "development-tools::testing"]
+
+[dependencies]
+# TUI Framework
+ratatui = "0.28"
+crossterm = "0.28"
+
+# Async Runtime
+tokio = { version = "1", features = ["full", "process"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Syntax Highlighting
+syntect = "5"
+
+# Text Editing
+tui-textarea = "0.6"
+
+# Clipboard
+arboard = "3"
+
+# File System & Paths
+dirs = "5"
+walkdir = "2"
+notify = "6"
+
+# Error Handling
+anyhow = "1"
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID for history entries
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# HTTP (for direct requests if not using hurl crate)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# URL parsing
+url = "2"
+
+# Regex for parsing
+regex = "1"
+
+[dev-dependencies]
+pretty_assertions = "1"
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
