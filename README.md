@@ -15,7 +15,7 @@ A terminal user interface for [Hurl](https://hurl.dev/) - run and debug HTTP req
 - Assertion results with pass/fail status
 - Environment variable management
 - Vim-style keyboard navigation
-- Copy file path and response to clipboard
+- Copy file path, response, or AI context to clipboard
 - Remember last opened file per directory
 
 ## Quick Start
@@ -48,6 +48,38 @@ cargo install --path hurl-tui
 | `c` | Copy AI context |
 | `?` | Help |
 | `q` | Quit |
+
+### AI Context Format
+
+Press `c` to copy the full test context in markdown format for AI prompts:
+
+```markdown
+## Hurl Test: api/users.hurl
+
+### Request (Hurl file)
+```hurl
+GET https://api.example.com/users
+HTTP 200
+[Asserts]
+jsonpath "$" count > 0
+```
+
+### Response
+**Status:** 200
+**Duration:** 145ms
+
+**Body:**
+```json
+{ "users": [...] }
+```
+
+### Assertion Results
+| Status | Assertion |
+|--------|----------|
+| PASS | jsonpath "$" count > 0 |
+
+### Result: SUCCESS
+```
 
 ## Project Structure
 

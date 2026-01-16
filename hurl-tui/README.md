@@ -84,6 +84,38 @@ hurl-tui /path/to/hurl/files
 | `Y` | Copy response to clipboard |
 | `c` | Copy AI context (request + response + assertions) |
 
+### AI Context Format
+
+Press `c` to copy the full test context in markdown format, ideal for AI prompts:
+
+```markdown
+## Hurl Test: api/users.hurl
+
+### Request (Hurl file)
+```hurl
+GET https://api.example.com/users
+HTTP 200
+[Asserts]
+jsonpath "$" count > 0
+```
+
+### Response
+**Status:** 200
+**Duration:** 145ms
+
+**Body:**
+```json
+{ "users": [...] }
+```
+
+### Assertion Results
+| Status | Assertion |
+|--------|----------|
+| PASS | jsonpath "$" count > 0 |
+
+### Result: SUCCESS
+```
+
 ### Commands
 
 | Command | Action |
