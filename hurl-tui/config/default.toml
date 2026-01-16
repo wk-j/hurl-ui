@@ -1,0 +1,52 @@
+# Hurl TUI Configuration
+# Place this file at ~/.config/hurl-tui/config.toml or ./hurl-tui.toml
+
+[general]
+# Default working directory (optional, uses current directory if not set)
+# default_directory = "/path/to/hurl/files"
+
+# Path to hurl binary (optional, uses PATH if not set)
+# hurl_path = "/usr/local/bin/hurl"
+
+# Request timeout in seconds
+timeout = 30
+
+# Maximum history entries to keep
+max_history = 100
+
+[ui]
+# Show line numbers in editor
+show_line_numbers = true
+
+# Show file icons in file browser
+show_icons = true
+
+# Color theme (currently only "default" is supported)
+theme = "default"
+
+# Border style: "plain", "rounded", "double"
+border_style = "rounded"
+
+# File browser width percentage (5-50)
+file_browser_width = 20
+
+[editor]
+# Tab size (number of spaces)
+tab_size = 2
+
+# Use spaces instead of tabs
+use_spaces = true
+
+# Auto-save file before running request
+auto_save = false
+
+# Enable syntax highlighting
+syntax_highlighting = true
+
+[keys]
+# Key bindings (not yet customizable, showing defaults)
+quit = "q"
+run = "r"
+edit = "e"
+save = "ctrl+s"
+help = "?"
