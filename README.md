@@ -8,6 +8,7 @@ A terminal user interface for [Hurl](https://hurl.dev/) - run and debug HTTP req
 ## Features
 
 - Browse and manage `.hurl` files with auto-expand
+- Filter files by name
 - Syntax highlighting for Hurl format
 - Auto-preview files on navigation
 - Execute requests and view responses
@@ -17,6 +18,7 @@ A terminal user interface for [Hurl](https://hurl.dev/) - run and debug HTTP req
 - Vim-style keyboard navigation
 - Copy file path, response, or AI context to clipboard
 - Remember last opened file per directory
+- Persist execution results per file across sessions
 
 ## Quick Start
 
@@ -42,6 +44,8 @@ cargo install --path hurl-tui
 | `Enter` | Open file / Run request |
 | `r` | Run request |
 | `e` | Edit mode |
+| `f` | Filter files by name |
+| `F` | Clear filter |
 | `Tab` | Cycle panels |
 | `y` | Copy file path |
 | `Y` | Copy response |

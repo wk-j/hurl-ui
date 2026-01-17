@@ -82,6 +82,14 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
             Span::styled("  /               ", Style::default().fg(Color::Green)),
             Span::styled("Search files", Style::default().fg(Color::White)),
         ]),
+        Line::from(vec![
+            Span::styled("  f               ", Style::default().fg(Color::Green)),
+            Span::styled("Filter files by name", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  F               ", Style::default().fg(Color::Green)),
+            Span::styled("Clear filter", Style::default().fg(Color::White)),
+        ]),
         Line::from(""),
         Line::from(Span::styled(
             "Actions",

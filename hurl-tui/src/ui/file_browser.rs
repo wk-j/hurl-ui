@@ -10,20 +10,34 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{ActivePanel, App};
+use crate::app::{ActivePanel, App, AppMode};
 
 /// Render the file browser panel
 pub fn render_file_browser(frame: &mut Frame, app: &App, area: Rect) {
     let is_active = app.active_panel == ActivePanel::FileBrowser;
+    let is_filtering = app.mode == AppMode::Filter;
+
+    // Build title with filter indicator
+    let title = if is_filtering {
+        format!(" Files [filter: {}|] ", app.filter_query)
+    } else if !app.filter_query.is_empty() {
+        format!(" Files [filter: {}] ", app.filter_query)
+    } else {
+        " Files ".to_string()
+    };
+
+    let border_color = if is_filtering {
+        Color::Yellow
+    } else if is_active {
+        Color::Cyan
+    } else {
+        Color::DarkGray
+    };
 
     let block = Block::default()
-        .title(" Files ")
+        .title(title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if is_active {
-            Color::Cyan
-        } else {
-            Color::DarkGray
-        }));
+        .border_style(Style::default().fg(border_color));
 
     let visible_files = app.get_visible_files();
     let items: Vec<ListItem> = visible_files

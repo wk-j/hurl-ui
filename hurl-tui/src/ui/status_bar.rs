@@ -64,6 +64,20 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::White),
             ));
         }
+        AppMode::Filter => {
+            spans.push(Span::styled(
+                " FILTER ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(" ", Style::default()));
+            spans.push(Span::styled(
+                format!("filter: {}_", app.filter_query),
+                Style::default().fg(Color::White),
+            ));
+        }
     }
 
     spans.push(Span::styled(" ", Style::default()));

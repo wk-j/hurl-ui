@@ -11,6 +11,18 @@ use crate::config::Config;
 use crate::parser::HurlFile;
 use crate::runner::{ExecutionResult, Runner};
 
+/// Serializable state for persistence
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+struct PersistedState {
+    /// Last opened file path
+    last_opened_file: Option<String>,
+    /// File tree index
+    file_tree_index: usize,
+    /// Execution results per file (keyed by relative path)
+    #[serde(default)]
+    file_execution_states: HashMap<String, ExecutionResult>,
+}
+
 /// Active panel in the UI
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActivePanel {
@@ -30,6 +42,7 @@ pub enum AppMode {
     Editing,
     Search,
     Command,
+    Filter,
 }
 
 /// File tree entry
@@ -131,6 +144,9 @@ pub struct App {
     /// Last execution result
     pub execution_result: Option<ExecutionResult>,
 
+    /// Execution results per file (keyed by relative path from working_dir)
+    file_execution_states: HashMap<String, ExecutionResult>,
+
     /// Whether a request is currently running
     pub is_running: bool,
 
@@ -151,6 +167,9 @@ pub struct App {
 
     /// Search query
     pub search_query: String,
+
+    /// Filter query for file browser
+    pub filter_query: String,
 
     /// Command input
     pub command_input: String,
@@ -191,6 +210,7 @@ impl App {
             editor_cursor: (0, 0),
             editor_scroll: 0,
             execution_result: None,
+            file_execution_states: HashMap::new(),
             is_running: false,
             variables: Vec::new(),
             current_environment: String::from("default"),
@@ -198,6 +218,7 @@ impl App {
             history: Vec::new(),
             history_index: 0,
             search_query: String::new(),
+            filter_query: String::new(),
             command_input: String::new(),
             status_message: None,
             runner: Runner::new(),
@@ -224,37 +245,45 @@ impl App {
         self.working_dir.join(".hurl-tui-state.json")
     }
 
-    /// Save the current state (last opened file)
+    /// Get the relative path for a file (used as key for file_execution_states)
+    fn get_relative_path(&self, path: &PathBuf) -> String {
+        path.strip_prefix(&self.working_dir)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string()
+    }
+
+    /// Save the current state (last opened file and execution states)
     fn save_state(&self) {
-        if let Some(path) = &self.current_file_path {
-            let state = serde_json::json!({
-                "last_opened_file": path.to_string_lossy(),
-                "file_tree_index": self.file_tree_index
-            });
-            
-            if let Ok(content) = serde_json::to_string_pretty(&state) {
-                let _ = std::fs::write(self.get_state_file_path(), content);
-            }
+        let state = PersistedState {
+            last_opened_file: self.current_file_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+            file_tree_index: self.file_tree_index,
+            file_execution_states: self.file_execution_states.clone(),
+        };
+        
+        if let Ok(content) = serde_json::to_string_pretty(&state) {
+            let _ = std::fs::write(self.get_state_file_path(), content);
         }
     }
 
-    /// Restore the last opened file from state
+    /// Restore the last opened file and execution states from persisted state
     fn restore_last_opened_file(&mut self) {
         let state_path = self.get_state_file_path();
         
         if let Ok(content) = std::fs::read_to_string(&state_path) {
-            if let Ok(state) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Ok(state) = serde_json::from_str::<PersistedState>(&content) {
+                // Restore file execution states
+                self.file_execution_states = state.file_execution_states;
+                
                 // Restore last opened file
-                if let Some(file_path) = state.get("last_opened_file").and_then(|v| v.as_str()) {
-                    let path = PathBuf::from(file_path);
+                if let Some(file_path) = state.last_opened_file {
+                    let path = PathBuf::from(&file_path);
                     if path.exists() {
                         let _ = self.preview_file(&path);
                         
                         // Try to restore file tree index
-                        if let Some(index) = state.get("file_tree_index").and_then(|v| v.as_u64()) {
-                            let max = self.get_visible_file_count().saturating_sub(1);
-                            self.file_tree_index = (index as usize).min(max);
-                        }
+                        let max = self.get_visible_file_count().saturating_sub(1);
+                        self.file_tree_index = state.file_tree_index.min(max);
                         
                         self.set_status(
                             &format!("Restored: {}", path.file_name()
@@ -305,6 +334,7 @@ impl App {
             AppMode::Editing => self.handle_editing_mode_key(key)?,
             AppMode::Search => self.handle_search_mode_key(key)?,
             AppMode::Command => self.handle_command_mode_key(key)?,
+            AppMode::Filter => self.handle_filter_mode_key(key)?,
         }
 
         Ok(())
@@ -394,6 +424,19 @@ impl App {
             KeyCode::Char('/') => {
                 self.mode = AppMode::Search;
                 self.search_query.clear();
+            }
+
+            // Filter files
+            KeyCode::Char('f') => {
+                self.mode = AppMode::Filter;
+                self.active_panel = ActivePanel::FileBrowser;
+            }
+
+            // Clear filter
+            KeyCode::Char('F') => {
+                self.filter_query.clear();
+                self.file_tree_index = 0;
+                self.set_status("Filter cleared", StatusLevel::Info);
             }
 
             // Command mode
@@ -541,6 +584,36 @@ impl App {
             }
             KeyCode::Char(c) => {
                 self.command_input.push(c);
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Handle key events in filter mode
+    fn handle_filter_mode_key(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                self.mode = AppMode::Normal;
+                // Keep the filter active, don't clear it
+            }
+            KeyCode::Enter => {
+                self.mode = AppMode::Normal;
+                if self.filter_query.is_empty() {
+                    self.set_status("Filter cleared", StatusLevel::Info);
+                } else {
+                    let count = self.get_visible_file_count();
+                    self.set_status(&format!("Filter: {} ({} files)", self.filter_query, count), StatusLevel::Info);
+                }
+            }
+            KeyCode::Backspace => {
+                self.filter_query.pop();
+                self.file_tree_index = 0;
+            }
+            KeyCode::Char(c) => {
+                self.filter_query.push(c);
+                self.file_tree_index = 0;
             }
             _ => {}
         }
@@ -707,19 +780,9 @@ impl App {
         }
     }
 
-    /// Get the count of visible files in the tree
+    /// Get the count of visible files in the tree (respects filter)
     fn get_visible_file_count(&self) -> usize {
-        fn count_visible(entries: &[FileEntry]) -> usize {
-            entries.iter().fold(0, |acc, entry| {
-                acc + 1
-                    + if entry.is_expanded {
-                        count_visible(&entry.children)
-                    } else {
-                        0
-                    }
-            })
-        }
-        count_visible(&self.file_tree)
+        self.get_visible_files().len()
     }
 
     /// Get selected file entry
@@ -880,7 +943,11 @@ impl App {
         self.editor_content = content.lines().map(String::from).collect();
         self.editor_cursor = (0, 0);
         self.editor_scroll = 0;
-        self.execution_result = None;
+        
+        // Restore execution state for this file if available
+        let relative_path = self.get_relative_path(path);
+        self.execution_result = self.file_execution_states.get(&relative_path).cloned();
+        
         self.response_scroll = 0;
         self.assertions_scroll = 0;
 
@@ -891,7 +958,13 @@ impl App {
         let file_name = path.file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path.display().to_string());
-        self.set_status(&format!("Preview: {}", file_name), StatusLevel::Info);
+        
+        // Show status with execution state info
+        if self.execution_result.is_some() {
+            self.set_status(&format!("Preview: {} (with cached result)", file_name), StatusLevel::Info);
+        } else {
+            self.set_status(&format!("Preview: {}", file_name), StatusLevel::Info);
+        }
 
         // Save state for next session
         self.save_state();
@@ -960,7 +1033,7 @@ impl App {
                     0,
                     HistoryEntry {
                         id: uuid::Uuid::new_v4(),
-                        file_path: path,
+                        file_path: path.clone(),
                         timestamp: chrono::Utc::now(),
                         duration_ms: duration.as_millis() as u64,
                         status_code,
@@ -968,9 +1041,16 @@ impl App {
                     },
                 );
 
+                // Store execution result in the per-file cache
+                let relative_path = self.get_relative_path(&path);
+                self.file_execution_states.insert(relative_path, exec_result.clone());
+
                 self.execution_result = Some(exec_result);
                 self.response_scroll = 0;
                 self.assertions_scroll = 0;
+
+                // Persist state to disk
+                self.save_state();
 
                 if success {
                     self.set_status(
@@ -1548,19 +1628,52 @@ impl App {
         }
     }
 
-    /// Get flattened visible file entries for rendering
+    /// Get flattened visible file entries for rendering (with filter applied)
     pub fn get_visible_files(&self) -> Vec<&FileEntry> {
-        fn collect_visible<'a>(entries: &'a [FileEntry], result: &mut Vec<&'a FileEntry>) {
+        fn collect_visible<'a>(
+            entries: &'a [FileEntry],
+            result: &mut Vec<&'a FileEntry>,
+            filter: &str,
+        ) {
+            let filter_lower = filter.to_lowercase();
             for entry in entries {
-                result.push(entry);
+                // Check if this entry matches the filter
+                let matches_filter = filter.is_empty()
+                    || entry.name.to_lowercase().contains(&filter_lower);
+                
+                // For directories, also check if any children match
+                let has_matching_children = entry.is_dir && entry.is_expanded
+                    && App::has_matching_descendants(&entry.children, &filter_lower);
+                
+                if matches_filter || has_matching_children || entry.is_dir {
+                    // Include directories to maintain tree structure, but only if
+                    // they match or have matching descendants (when filter is active)
+                    if filter.is_empty() || matches_filter || has_matching_children {
+                        result.push(entry);
+                    }
+                }
+                
                 if entry.is_expanded {
-                    collect_visible(&entry.children, result);
+                    collect_visible(&entry.children, result, filter);
                 }
             }
         }
 
         let mut result = Vec::new();
-        collect_visible(&self.file_tree, &mut result);
+        collect_visible(&self.file_tree, &mut result, &self.filter_query);
         result
+    }
+
+    /// Check if any descendants match the filter
+    fn has_matching_descendants(entries: &[FileEntry], filter_lower: &str) -> bool {
+        for entry in entries {
+            if entry.name.to_lowercase().contains(filter_lower) {
+                return true;
+            }
+            if entry.is_expanded && Self::has_matching_descendants(&entry.children, filter_lower) {
+                return true;
+            }
+        }
+        false
     }
 }
