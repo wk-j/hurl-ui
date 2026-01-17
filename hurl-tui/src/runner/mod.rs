@@ -3,7 +3,7 @@
 //! This module handles executing Hurl files and capturing results.
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -230,7 +230,7 @@ impl Default for Runner {
 }
 
 /// Result of executing a Hurl file
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionResult {
     /// Whether execution was successful (all assertions passed)
     pub success: bool,
@@ -247,7 +247,7 @@ pub struct ExecutionResult {
 }
 
 /// HTTP response details
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Response {
     /// HTTP status code
     pub status_code: u16,
@@ -260,7 +260,7 @@ pub struct Response {
 }
 
 /// Result of a single assertion
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssertionResult {
     /// Whether the assertion passed
     pub success: bool,

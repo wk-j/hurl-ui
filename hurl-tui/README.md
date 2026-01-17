@@ -5,6 +5,7 @@ A Terminal User Interface for [Hurl](https://hurl.dev/), the command-line tool f
 ## Features
 
 - **File Browser**: Navigate and manage `.hurl` files in a tree view with auto-expand
+- **File Filtering**: Filter files by name with `f` key, clear with `F`
 - **Auto Preview**: Automatically preview files when navigating
 - **Syntax Highlighting**: Hurl-specific syntax highlighting in the editor
 - **Request Execution**: Run Hurl requests directly from the TUI
@@ -14,6 +15,7 @@ A Terminal User Interface for [Hurl](https://hurl.dev/), the command-line tool f
 - **Vim-style Navigation**: Familiar keyboard shortcuts for efficient navigation
 - **Clipboard Support**: Copy file paths and responses to clipboard
 - **Session Restore**: Remember last opened file per directory
+- **Execution State Persistence**: Cached execution results per file are restored across sessions
 
 ## Installation
 
@@ -72,6 +74,8 @@ hurl-tui /path/to/hurl/files
 | `E` | Cycle environment |
 | `R` | Refresh file tree |
 | `/` | Search files |
+| `f` | Filter files by name |
+| `F` | Clear filter |
 | `:` | Command mode |
 | `?` | Show help |
 | `q` | Quit |

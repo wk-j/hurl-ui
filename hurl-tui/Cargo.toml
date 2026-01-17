@@ -12,7 +12,7 @@ categories = ["command-line-utilities", "development-tools::testing"]
 [dependencies]
 # TUI Framework
 ratatui = "0.28"
-crossterm = "0.28"
+crossterm = { version = "0.28", features = ["use-dev-tty"] }
 
 # Async Runtime
 tokio = { version = "1", features = ["full", "process"] }
