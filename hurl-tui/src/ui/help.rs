@@ -66,12 +66,26 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
                 .add_modifier(Modifier::BOLD),
         )),
         help_line("r", "Execute request"),
-        help_line("e", "Edit mode"),
+        help_line("e", "Edit mode (vim)"),
         help_line("v", "Variables panel"),
         help_line("E", "Cycle environment"),
         help_line("y / Y", "Copy path / response"),
         help_line("c", "Copy AI context"),
         help_line("o", "Output context & quit"),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("{} VIM EDIT MODE", BoxChars::TRIANGLE_RIGHT),
+            Style::default()
+                .fg(HackerTheme::SYNTAX_SECTION)
+                .add_modifier(Modifier::BOLD),
+        )),
+        help_line("h/j/k/l", "Move cursor"),
+        help_line("w/b/e", "Word motions"),
+        help_line("0/$/^", "Line start/end"),
+        help_line("i/a/I/A", "Insert mode"),
+        help_line("o/O", "Open line below/above"),
+        help_line("x/d/D", "Delete char/line/to-end"),
+        help_line("Esc", "Back to normal mode"),
         Line::from(""),
         Line::from(Span::styled(
             format!("{} COMMANDS", BoxChars::TRIANGLE_RIGHT),

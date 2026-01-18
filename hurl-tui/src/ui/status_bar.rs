@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, AppMode, StatusLevel};
+use crate::app::{App, AppMode, StatusLevel, VimMode};
 use super::theme::{HackerTheme, BoxChars};
 
 /// Render the status bar
@@ -30,11 +30,16 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
             ));
         }
         AppMode::Editing => {
+            // Show vim sub-mode (NORMAL or INSERT)
+            let (vim_label, fg, bg) = match app.vim_mode {
+                VimMode::Normal => ("NORMAL", HackerTheme::MODE_NORMAL_FG, HackerTheme::MODE_NORMAL_BG),
+                VimMode::Insert => ("INSERT", HackerTheme::MODE_EDIT_FG, HackerTheme::MODE_EDIT_BG),
+            };
             spans.push(Span::styled(
-                format!(" {} EDIT ", BoxChars::SCANNER),
+                format!(" {} {} ", BoxChars::SCANNER, vim_label),
                 Style::default()
-                    .fg(HackerTheme::MODE_EDIT_FG)
-                    .bg(HackerTheme::MODE_EDIT_BG)
+                    .fg(fg)
+                    .bg(bg)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -133,13 +138,19 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     // Right-aligned shortcuts with hacker style
-    let shortcuts = if app.mode == AppMode::Normal {
-        format!(
+    let shortcuts = match app.mode {
+        AppMode::Normal => format!(
             " [r]un {} [e]dit {} [v]ars {} [?]help {} [q]uit ",
             BoxChars::DOT, BoxChars::DOT, BoxChars::DOT, BoxChars::DOT
-        )
-    } else {
-        format!(" [Esc] {} back ", BoxChars::ARROW_RIGHT)
+        ),
+        AppMode::Editing => match app.vim_mode {
+            VimMode::Normal => format!(
+                " [i]nsert {} [a]ppend {} [o]pen {} [q]uit ",
+                BoxChars::DOT, BoxChars::DOT, BoxChars::DOT
+            ),
+            VimMode::Insert => format!(" [Esc] {} normal mode ", BoxChars::ARROW_RIGHT),
+        },
+        _ => format!(" [Esc] {} back ", BoxChars::ARROW_RIGHT),
     };
 
     // Calculate padding

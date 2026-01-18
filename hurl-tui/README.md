@@ -69,7 +69,7 @@ hurl-tui /path/to/hurl/files
 | `Enter` | Open file / Run request |
 | `Space` | Expand/collapse folder |
 | `r` | Run current request |
-| `e` | Enter edit mode |
+| `e` | Enter edit mode (vim) |
 | `v` | Toggle variables panel |
 | `E` | Cycle environment |
 | `R` | Refresh file tree |
@@ -79,6 +79,37 @@ hurl-tui /path/to/hurl/files
 | `:` | Command mode |
 | `?` | Show help |
 | `q` | Quit |
+
+### Vim Edit Mode
+
+When in edit mode (`e`), the editor uses vim-style keybindings:
+
+**Normal Mode** (navigation & commands):
+
+| Key | Action |
+|-----|--------|
+| `h/j/k/l` | Move cursor left/down/up/right |
+| `w/b/e` | Word forward/backward/end |
+| `0/$` | Line start/end |
+| `^` | First non-whitespace |
+| `g/G` | First/last line |
+| `Ctrl+d/u` | Page down/up |
+| `i/a` | Insert before/after cursor |
+| `I/A` | Insert at line start/end |
+| `o/O` | Open line below/above |
+| `x` | Delete character |
+| `d` | Delete line |
+| `D` | Delete to end of line |
+| `Esc/q` | Exit edit mode |
+
+**Insert Mode** (text input):
+
+| Key | Action |
+|-----|--------|
+| (typing) | Insert characters |
+| `Esc` | Return to Normal mode |
+| `Backspace` | Delete before cursor |
+| Arrow keys | Move cursor |
 
 ### Clipboard & Output
 

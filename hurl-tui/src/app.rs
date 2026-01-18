@@ -45,6 +45,14 @@ pub enum AppMode {
     Filter,
 }
 
+/// Vim sub-mode when in Editing mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VimMode {
+    #[default]
+    Normal,   // Navigation and commands (hjkl, etc.)
+    Insert,   // Text input mode
+}
+
 /// File tree entry
 #[derive(Debug, Clone)]
 pub struct FileEntry {
@@ -119,6 +127,9 @@ pub struct App {
 
     /// Current application mode
     pub mode: AppMode,
+
+    /// Vim sub-mode (when in Editing mode)
+    pub vim_mode: VimMode,
 
     /// File tree entries
     pub file_tree: Vec<FileEntry>,
@@ -205,6 +216,7 @@ impl App {
             quit: false,
             active_panel: ActivePanel::FileBrowser,
             mode: AppMode::Normal,
+            vim_mode: VimMode::Normal,
             file_tree: Vec::new(),
             file_tree_index: 0,
             current_file: None,
@@ -509,44 +521,112 @@ impl App {
         Ok(())
     }
 
-    /// Handle key events in editing mode
+    /// Handle key events in editing mode (vim-style)
     fn handle_editing_mode_key(&mut self, key: KeyEvent) -> Result<()> {
+        match self.vim_mode {
+            VimMode::Normal => self.handle_vim_normal_mode(key),
+            VimMode::Insert => self.handle_vim_insert_mode(key),
+        }
+    }
+
+    /// Handle vim normal mode keys (navigation and commands)
+    fn handle_vim_normal_mode(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
+            // Exit editing mode
             KeyCode::Esc => {
                 self.mode = AppMode::Normal;
+                self.vim_mode = VimMode::Normal;
             }
-            KeyCode::Enter => {
-                self.editor_insert_newline();
+            KeyCode::Char('q') => {
+                self.mode = AppMode::Normal;
+                self.vim_mode = VimMode::Normal;
             }
-            KeyCode::Backspace => {
-                self.editor_backspace();
+
+            // Basic navigation (hjkl)
+            KeyCode::Char('h') | KeyCode::Left => self.editor_move_cursor_left(),
+            KeyCode::Char('j') | KeyCode::Down => self.editor_move_cursor_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.editor_move_cursor_up(),
+            KeyCode::Char('l') | KeyCode::Right => self.editor_move_cursor_right(),
+
+            // Line navigation
+            KeyCode::Char('0') | KeyCode::Home => self.editor_move_to_line_start(),
+            KeyCode::Char('$') | KeyCode::End => self.editor_move_to_line_end(),
+            KeyCode::Char('^') => self.editor_move_to_first_non_whitespace(),
+
+            // File navigation
+            KeyCode::Char('g') => self.editor_move_to_first_line(),
+            KeyCode::Char('G') => self.editor_move_to_last_line(),
+
+            // Word navigation
+            KeyCode::Char('w') => self.editor_move_word_forward(),
+            KeyCode::Char('b') => self.editor_move_word_backward(),
+            KeyCode::Char('e') => self.editor_move_word_end(),
+
+            // Enter insert mode
+            KeyCode::Char('i') => {
+                self.vim_mode = VimMode::Insert;
             }
-            KeyCode::Delete => {
-                self.editor_delete();
-            }
-            KeyCode::Left => {
-                self.editor_move_cursor_left();
-            }
-            KeyCode::Right => {
+            KeyCode::Char('a') => {
                 self.editor_move_cursor_right();
+                self.vim_mode = VimMode::Insert;
             }
-            KeyCode::Up => {
-                self.editor_move_cursor_up();
+            KeyCode::Char('I') => {
+                self.editor_move_to_first_non_whitespace();
+                self.vim_mode = VimMode::Insert;
             }
-            KeyCode::Down => {
-                self.editor_move_cursor_down();
+            KeyCode::Char('A') => {
+                self.editor_move_to_line_end();
+                self.vim_mode = VimMode::Insert;
             }
-            KeyCode::Home => {
-                self.editor_cursor.1 = 0;
+            KeyCode::Char('o') => {
+                self.editor_insert_line_below();
+                self.vim_mode = VimMode::Insert;
             }
-            KeyCode::End => {
-                if let Some(line) = self.editor_content.get(self.editor_cursor.0) {
-                    self.editor_cursor.1 = line.len();
+            KeyCode::Char('O') => {
+                self.editor_insert_line_above();
+                self.vim_mode = VimMode::Insert;
+            }
+
+            // Page navigation (must be before delete commands to check modifiers first)
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.editor_page_up();
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.editor_page_down();
+            }
+
+            // Delete commands
+            KeyCode::Char('x') => self.editor_delete_char(),
+            KeyCode::Char('d') => self.editor_delete_line(),
+            KeyCode::Char('D') => self.editor_delete_to_end(),
+
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Handle vim insert mode keys (text input)
+    fn handle_vim_insert_mode(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                self.vim_mode = VimMode::Normal;
+                // Move cursor back one (vim behavior)
+                if self.editor_cursor.1 > 0 {
+                    self.editor_cursor.1 -= 1;
                 }
             }
-            KeyCode::Char(c) => {
-                self.editor_insert_char(c);
-            }
+            KeyCode::Enter => self.editor_insert_newline(),
+            KeyCode::Backspace => self.editor_backspace(),
+            KeyCode::Delete => self.editor_delete(),
+            KeyCode::Left => self.editor_move_cursor_left(),
+            KeyCode::Right => self.editor_move_cursor_right(),
+            KeyCode::Up => self.editor_move_cursor_up(),
+            KeyCode::Down => self.editor_move_cursor_down(),
+            KeyCode::Home => self.editor_move_to_line_start(),
+            KeyCode::End => self.editor_move_to_line_end(),
+            KeyCode::Tab => self.editor_insert_char('\t'),
+            KeyCode::Char(c) => self.editor_insert_char(c),
             _ => {}
         }
 
@@ -1639,6 +1719,203 @@ impl App {
                 .map_or(0, |l| l.len());
             self.editor_cursor.1 = self.editor_cursor.1.min(line_len);
         }
+    }
+
+    // Vim-style editor navigation methods
+
+    fn editor_move_to_line_start(&mut self) {
+        self.editor_cursor.1 = 0;
+    }
+
+    fn editor_move_to_line_end(&mut self) {
+        if let Some(line) = self.editor_content.get(self.editor_cursor.0) {
+            self.editor_cursor.1 = line.len();
+        }
+    }
+
+    fn editor_move_to_first_non_whitespace(&mut self) {
+        if let Some(line) = self.editor_content.get(self.editor_cursor.0) {
+            let first_non_ws = line.chars().position(|c| !c.is_whitespace()).unwrap_or(0);
+            self.editor_cursor.1 = first_non_ws;
+        }
+    }
+
+    fn editor_move_to_first_line(&mut self) {
+        self.editor_cursor = (0, 0);
+        self.editor_scroll = 0;
+    }
+
+    fn editor_move_to_last_line(&mut self) {
+        if !self.editor_content.is_empty() {
+            self.editor_cursor.0 = self.editor_content.len() - 1;
+            self.editor_cursor.1 = 0;
+            // Adjust scroll to show last line
+            let visible_height = 20; // approximate
+            if self.editor_cursor.0 >= visible_height {
+                self.editor_scroll = self.editor_cursor.0 - visible_height + 1;
+            }
+        }
+    }
+
+    fn editor_move_word_forward(&mut self) {
+        let (line, col) = self.editor_cursor;
+        if let Some(content) = self.editor_content.get(line) {
+            let chars: Vec<char> = content.chars().collect();
+            let mut new_col = col;
+
+            // Skip current word (non-whitespace)
+            while new_col < chars.len() && !chars[new_col].is_whitespace() {
+                new_col += 1;
+            }
+            // Skip whitespace
+            while new_col < chars.len() && chars[new_col].is_whitespace() {
+                new_col += 1;
+            }
+
+            if new_col < chars.len() {
+                self.editor_cursor.1 = new_col;
+            } else if line + 1 < self.editor_content.len() {
+                // Move to start of next line
+                self.editor_cursor = (line + 1, 0);
+                // Skip leading whitespace on next line
+                self.editor_move_to_first_non_whitespace();
+            } else {
+                // End of file, go to end of line
+                self.editor_cursor.1 = chars.len();
+            }
+        }
+    }
+
+    fn editor_move_word_backward(&mut self) {
+        let (line, col) = self.editor_cursor;
+        if col > 0 {
+            if let Some(content) = self.editor_content.get(line) {
+                let chars: Vec<char> = content.chars().collect();
+                let mut new_col = col.saturating_sub(1);
+
+                // Skip whitespace backwards
+                while new_col > 0 && chars[new_col].is_whitespace() {
+                    new_col -= 1;
+                }
+                // Skip to start of word
+                while new_col > 0 && !chars[new_col - 1].is_whitespace() {
+                    new_col -= 1;
+                }
+
+                self.editor_cursor.1 = new_col;
+            }
+        } else if line > 0 {
+            // Move to end of previous line
+            self.editor_cursor.0 = line - 1;
+            if let Some(prev_line) = self.editor_content.get(line - 1) {
+                self.editor_cursor.1 = prev_line.len();
+            }
+        }
+    }
+
+    fn editor_move_word_end(&mut self) {
+        let (line, col) = self.editor_cursor;
+        if let Some(content) = self.editor_content.get(line) {
+            let chars: Vec<char> = content.chars().collect();
+            let mut new_col = col;
+
+            // Move at least one character
+            if new_col < chars.len() {
+                new_col += 1;
+            }
+
+            // Skip whitespace
+            while new_col < chars.len() && chars[new_col].is_whitespace() {
+                new_col += 1;
+            }
+            // Go to end of word
+            while new_col < chars.len() && !chars[new_col].is_whitespace() {
+                new_col += 1;
+            }
+
+            if new_col > 0 && new_col <= chars.len() {
+                self.editor_cursor.1 = new_col.saturating_sub(1);
+            } else if line + 1 < self.editor_content.len() {
+                // Move to next line
+                self.editor_cursor = (line + 1, 0);
+            }
+        }
+    }
+
+    fn editor_insert_line_below(&mut self) {
+        let line = self.editor_cursor.0;
+        self.editor_content.insert(line + 1, String::new());
+        self.editor_cursor = (line + 1, 0);
+    }
+
+    fn editor_insert_line_above(&mut self) {
+        let line = self.editor_cursor.0;
+        self.editor_content.insert(line, String::new());
+        self.editor_cursor = (line, 0);
+    }
+
+    fn editor_delete_char(&mut self) {
+        // Delete character under cursor (vim 'x')
+        let (line, col) = self.editor_cursor;
+        if let Some(content) = self.editor_content.get_mut(line) {
+            if col < content.len() {
+                content.remove(col);
+                // Adjust cursor if at end of line
+                if col >= content.len() && col > 0 {
+                    self.editor_cursor.1 = content.len().saturating_sub(1);
+                }
+            }
+        }
+    }
+
+    fn editor_delete_line(&mut self) {
+        // Delete entire line (vim 'dd')
+        if !self.editor_content.is_empty() {
+            let line = self.editor_cursor.0;
+            self.editor_content.remove(line);
+
+            // Ensure at least one empty line
+            if self.editor_content.is_empty() {
+                self.editor_content.push(String::new());
+            }
+
+            // Adjust cursor position
+            if self.editor_cursor.0 >= self.editor_content.len() {
+                self.editor_cursor.0 = self.editor_content.len().saturating_sub(1);
+            }
+            self.editor_cursor.1 = 0;
+        }
+    }
+
+    fn editor_delete_to_end(&mut self) {
+        // Delete from cursor to end of line (vim 'D')
+        let (line, col) = self.editor_cursor;
+        if let Some(content) = self.editor_content.get_mut(line) {
+            content.truncate(col);
+            // Adjust cursor if needed
+            if self.editor_cursor.1 > 0 {
+                self.editor_cursor.1 = col.saturating_sub(1);
+            }
+        }
+    }
+
+    fn editor_page_up(&mut self) {
+        let page_size = 20; // Could be calculated from visible area
+        self.editor_cursor.0 = self.editor_cursor.0.saturating_sub(page_size);
+        self.editor_scroll = self.editor_scroll.saturating_sub(page_size);
+        // Adjust column to line length
+        let line_len = self.editor_content.get(self.editor_cursor.0).map_or(0, |l| l.len());
+        self.editor_cursor.1 = self.editor_cursor.1.min(line_len);
+    }
+
+    fn editor_page_down(&mut self) {
+        let page_size = 20; // Could be calculated from visible area
+        let max_line = self.editor_content.len().saturating_sub(1);
+        self.editor_cursor.0 = (self.editor_cursor.0 + page_size).min(max_line);
+        self.editor_scroll = (self.editor_scroll + page_size).min(max_line);
+        // Adjust column to line length
+        let line_len = self.editor_content.get(self.editor_cursor.0).map_or(0, |l| l.len());
+        self.editor_cursor.1 = self.editor_cursor.1.min(line_len);
     }
 
     /// Get flattened visible file entries for rendering (with filter applied)

@@ -10,7 +10,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{ActivePanel, App, AppMode};
+use crate::app::{ActivePanel, App, AppMode, VimMode};
 use super::theme::{HackerTheme, BoxChars};
 
 /// Render the editor panel
@@ -18,13 +18,20 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
     let is_active = app.active_panel == ActivePanel::Editor;
     let is_editing = app.mode == AppMode::Editing;
 
+    let vim_mode_str = match (is_editing, app.vim_mode) {
+        (true, VimMode::Normal) => "[VIM]",
+        (true, VimMode::Insert) => "[INSERT]",
+        _ => "",
+    };
+
     let title = match (&app.current_file_path, is_editing) {
         (Some(path), true) => format!(
-            " {} {} [EDITING] ",
+            " {} {} {} ",
             BoxChars::TERMINAL_PROMPT,
             path.file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "untitled".to_string())
+                .unwrap_or_else(|| "untitled".to_string()),
+            vim_mode_str
         ),
         (Some(path), false) => format!(
             " {} {} ",
@@ -105,13 +112,26 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
                 };
 
                 spans.extend(highlight_hurl_spans(before));
-                spans.push(Span::styled(
-                    cursor_char.to_string(),
-                    Style::default()
-                        .fg(HackerTheme::CURSOR_FG)
-                        .bg(HackerTheme::CURSOR_BG)
-                        .add_modifier(Modifier::BOLD),
-                ));
+                
+                // Different cursor styles for vim modes
+                let cursor_style = match app.vim_mode {
+                    VimMode::Normal => {
+                        // Block cursor (highlighted background) for normal mode
+                        Style::default()
+                            .fg(HackerTheme::CURSOR_FG)
+                            .bg(HackerTheme::CURSOR_BG)
+                            .add_modifier(Modifier::BOLD)
+                    }
+                    VimMode::Insert => {
+                        // Underline cursor for insert mode
+                        Style::default()
+                            .fg(HackerTheme::MATRIX_GREEN_BRIGHT)
+                            .bg(HackerTheme::VOID_BLACK)
+                            .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
+                    }
+                };
+                
+                spans.push(Span::styled(cursor_char.to_string(), cursor_style));
                 spans.extend(highlight_hurl_spans(after));
             } else {
                 spans.extend(styled_content);
