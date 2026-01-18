@@ -104,12 +104,29 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         ));
     }
 
-    // Running indicator with animation feel
+    // Running indicator with animated spinner
     if app.is_running {
+        let spinner = BoxChars::spinner(app.spinner_frame);
+        let matrix_char = BoxChars::spinner_matrix(app.spinner_frame);
+        
         spans.push(Span::styled(
-            format!(" {}{}{}  EXECUTING... ", BoxChars::GLITCH_1, BoxChars::GLITCH_2, BoxChars::GLITCH_1),
+            format!(" {} ", spinner),
+            Style::default()
+                .fg(HackerTheme::MATRIX_GREEN_BRIGHT)
+                .bg(HackerTheme::DARK_BG)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            "EXECUTING",
             Style::default()
                 .fg(HackerTheme::RUNNING)
+                .bg(HackerTheme::DARK_BG)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            format!(" {} ", matrix_char),
+            Style::default()
+                .fg(HackerTheme::CYBER_CYAN)
                 .bg(HackerTheme::DARK_BG)
                 .add_modifier(Modifier::BOLD),
         ));

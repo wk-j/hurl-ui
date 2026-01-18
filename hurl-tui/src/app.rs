@@ -150,6 +150,9 @@ pub struct App {
     /// Whether a request is currently running
     pub is_running: bool,
 
+    /// Spinner animation frame (for progress indicator)
+    pub spinner_frame: usize,
+
     /// Variables for the current environment
     pub variables: Vec<Variable>,
 
@@ -212,6 +215,7 @@ impl App {
             execution_result: None,
             file_execution_states: HashMap::new(),
             is_running: false,
+            spinner_frame: 0,
             variables: Vec::new(),
             current_environment: String::from("default"),
             environments: vec![String::from("default")],
@@ -309,6 +313,10 @@ impl App {
 
     /// Handle tick event (called periodically)
     pub fn on_tick(&mut self) {
+        // Advance spinner animation when running
+        if self.is_running {
+            self.spinner_frame = self.spinner_frame.wrapping_add(1);
+        }
         // Clear status message after some time (could track time)
         // For now, status messages persist until next action
     }

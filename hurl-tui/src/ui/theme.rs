@@ -157,4 +157,41 @@ impl BoxChars {
     pub const CHECK: &'static str = "✓";
     pub const CROSS: &'static str = "✗";
     pub const DOT: &'static str = "·";
+
+    // Spinner frames for loading animation
+    pub const SPINNER: [&'static str; 10] = [
+        "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
+    ];
+
+    // Alternative spinner (blocks)
+    pub const SPINNER_BLOCKS: [&'static str; 4] = ["▖", "▘", "▝", "▗"];
+
+    // Matrix-style spinner
+    pub const SPINNER_MATRIX: [&'static str; 8] = [
+        "◢", "◣", "◤", "◥", "◰", "◳", "◲", "◱"
+    ];
+
+    // Cyber loading bar
+    pub const LOADING_BAR: [&'static str; 5] = [
+        "[    ]",
+        "[=   ]",
+        "[==  ]",
+        "[=== ]",
+        "[====]",
+    ];
+
+    /// Get spinner frame by index
+    pub fn spinner(frame: usize) -> &'static str {
+        Self::SPINNER[frame % Self::SPINNER.len()]
+    }
+
+    /// Get matrix spinner frame by index
+    pub fn spinner_matrix(frame: usize) -> &'static str {
+        Self::SPINNER_MATRIX[frame % Self::SPINNER_MATRIX.len()]
+    }
+
+    /// Get loading bar frame by index
+    pub fn loading_bar(frame: usize) -> &'static str {
+        Self::LOADING_BAR[frame % Self::LOADING_BAR.len()]
+    }
 }
