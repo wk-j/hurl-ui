@@ -205,6 +205,12 @@ pub struct App {
 
     /// Output to print to stdout after quitting (for pipe support)
     output: Option<String>,
+
+    /// Internal clipboard for file copy/paste operations in the file browser.
+    /// Stores the absolute path of the source file when user presses 'p' to copy.
+    /// Used by paste operation ('P') to duplicate the file to target location.
+    /// Note: This is separate from the system clipboard used for text copying.
+    pub clipboard_file: Option<PathBuf>,
 }
 
 impl App {
@@ -242,6 +248,7 @@ impl App {
             assertions_scroll: 0,
             show_help: false,
             output: None,
+            clipboard_file: None,
         };
 
         // Load file tree
@@ -513,6 +520,16 @@ impl App {
             // Output AI context to stdout and quit (o = output for pipe/Helix)
             KeyCode::Char('o') => {
                 self.output_ai_context_and_quit();
+            }
+
+            // Copy file to clipboard (p = put/copy file)
+            KeyCode::Char('p') => {
+                self.copy_file_to_clipboard();
+            }
+
+            // Paste file from clipboard (P = paste file)
+            KeyCode::Char('P') => {
+                self.paste_file_from_clipboard();
             }
 
             _ => {}
@@ -1311,6 +1328,135 @@ impl App {
         let mut clipboard = Clipboard::new()?;
         clipboard.set_text(text)?;
         Ok(())
+    }
+
+    /// Copy the selected file to the internal clipboard for paste operation.
+    ///
+    /// This function stores the path of the currently selected file in `clipboard_file`.
+    /// Only works when the file browser panel is active and a file (not directory) is selected.
+    ///
+    /// # Behavior
+    /// - Only files can be copied, not directories
+    /// - The file path is stored in memory (not system clipboard)
+    /// - Shows status message indicating success or failure
+    ///
+    /// # Keyboard Shortcut
+    /// `p` - Copy selected file
+    fn copy_file_to_clipboard(&mut self) {
+        // Ensure we're in the file browser panel
+        if self.active_panel != ActivePanel::FileBrowser {
+            self.set_status("Copy only works in file browser", StatusLevel::Warning);
+            return;
+        }
+
+        if let Some(entry) = self.get_selected_file_entry() {
+            // Directories cannot be copied (only files)
+            if entry.is_dir {
+                self.set_status("Cannot copy directories", StatusLevel::Warning);
+                return;
+            }
+
+            // Store the file path in the clipboard
+            let path = entry.path.clone();
+            let file_name = entry.name.clone();
+            self.clipboard_file = Some(path);
+            self.set_status(&format!("Copied: {}", file_name), StatusLevel::Success);
+        } else {
+            self.set_status("No file selected", StatusLevel::Warning);
+        }
+    }
+
+    /// Paste the previously copied file to the current location.
+    ///
+    /// This function duplicates the file stored in `clipboard_file` to the target directory.
+    /// The target directory is determined by the current selection in the file browser.
+    ///
+    /// # Target Directory Logic
+    /// - If a directory is selected: paste into that directory
+    /// - If a file is selected: paste into the parent directory of that file
+    /// - If nothing is selected: paste into the working directory
+    ///
+    /// # Name Conflict Handling
+    /// If a file with the same name already exists, a suffix is appended:
+    /// - `file.hurl` -> `file_copy1.hurl`
+    /// - `file_copy1.hurl` -> `file_copy2.hurl`
+    ///
+    /// # Keyboard Shortcut
+    /// `P` (Shift+p) - Paste copied file
+    fn paste_file_from_clipboard(&mut self) {
+        // Ensure we're in the file browser panel
+        if self.active_panel != ActivePanel::FileBrowser {
+            self.set_status("Paste only works in file browser", StatusLevel::Warning);
+            return;
+        }
+
+        // Check if there's a file in the clipboard
+        let Some(source_path) = self.clipboard_file.clone() else {
+            self.set_status("No file in clipboard. Use 'p' to copy first.", StatusLevel::Warning);
+            return;
+        };
+
+        // Verify the source file still exists
+        if !source_path.exists() {
+            self.set_status("Source file no longer exists", StatusLevel::Error);
+            self.clipboard_file = None;
+            return;
+        }
+
+        // Determine the target directory based on current selection
+        let target_dir = if let Some(entry) = self.get_selected_file_entry() {
+            if entry.is_dir {
+                // Selected item is a directory - paste into it
+                entry.path.clone()
+            } else {
+                // Selected item is a file - paste into its parent directory
+                entry.path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| self.working_dir.clone())
+            }
+        } else {
+            // No selection - paste into the working directory
+            self.working_dir.clone()
+        };
+
+        // Extract the source file name
+        let Some(file_name) = source_path.file_name() else {
+            self.set_status("Invalid source file", StatusLevel::Error);
+            return;
+        };
+
+        // Build the target path, handling name conflicts by appending _copyN suffix
+        let mut target_path = target_dir.join(file_name);
+        let mut counter = 1;
+
+        // Generate unique filename if target already exists
+        while target_path.exists() {
+            let stem = source_path.file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let ext = source_path.extension()
+                .map(|e| format!(".{}", e.to_string_lossy()))
+                .unwrap_or_default();
+            let new_name = format!("{}_copy{}{}", stem, counter, ext);
+            target_path = target_dir.join(new_name);
+            counter += 1;
+        }
+
+        // Perform the file copy operation
+        match std::fs::copy(&source_path, &target_path) {
+            Ok(_) => {
+                let target_name = target_path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                self.set_status(&format!("Pasted: {}", target_name), StatusLevel::Success);
+                
+                // Refresh file tree to show the newly pasted file
+                if let Err(e) = self.refresh_file_tree() {
+                    self.set_status(&format!("Pasted but refresh failed: {}", e), StatusLevel::Warning);
+                }
+            }
+            Err(e) => {
+                self.set_status(&format!("Paste failed: {}", e), StatusLevel::Error);
+            }
+        }
     }
 
     /// Copy full test context for AI (request + response + assertions)

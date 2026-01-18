@@ -5,6 +5,7 @@ A Terminal User Interface for [Hurl](https://hurl.dev/), the command-line tool f
 ## Features
 
 - **File Browser**: Navigate and manage `.hurl` files in a tree view with auto-expand
+- **File Copy/Paste**: Duplicate files with `p` (copy) and `P` (paste)
 - **File Filtering**: Filter files by name with `f` key, clear with `F`
 - **Auto Preview**: Automatically preview files when navigating
 - **Syntax Highlighting**: Hurl-specific syntax highlighting in the editor
@@ -76,6 +77,8 @@ hurl-tui /path/to/hurl/files
 | `/` | Search files |
 | `f` | Filter files by name |
 | `F` | Clear filter |
+| `p` | Copy file (for paste) |
+| `P` | Paste copied file |
 | `:` | Command mode |
 | `?` | Show help |
 | `q` | Quit |

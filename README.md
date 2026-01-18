@@ -46,6 +46,8 @@ cargo install --path hurl-tui
 | `e` | Edit mode |
 | `f` | Filter files by name |
 | `F` | Clear filter |
+| `p` | Copy file (to clipboard) |
+| `P` | Paste file |
 | `Tab` | Cycle panels |
 | `y` | Copy file path |
 | `Y` | Copy response |

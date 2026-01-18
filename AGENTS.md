@@ -118,10 +118,11 @@ mod tests {
 
 ### Documentation Updates
 
-**Always update documentation when changing features:**
+**MANDATORY: Always update documentation after implementing new features:**
 - Update `README.md` (root) for user-facing feature changes
 - Update `hurl-tui/README.md` for detailed documentation
 - Update help text in `ui/help.rs` for keyboard shortcuts
+- This is a required step, not optional - features are not complete until documented
 
 ### State Persistence
 
