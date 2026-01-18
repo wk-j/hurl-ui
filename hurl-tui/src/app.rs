@@ -43,6 +43,7 @@ pub enum AppMode {
     Search,
     Command,
     Filter,
+    Rename,
 }
 
 /// Vim sub-mode when in Editing mode
@@ -211,6 +212,14 @@ pub struct App {
     /// Used by paste operation ('P') to duplicate the file to target location.
     /// Note: This is separate from the system clipboard used for text copying.
     pub clipboard_file: Option<PathBuf>,
+
+    /// Input buffer for rename operation.
+    /// Contains the new filename being typed by the user during rename mode.
+    pub rename_input: String,
+
+    /// The file path being renamed.
+    /// Stores the original path of the file when user initiates rename with 'n'.
+    rename_target: Option<PathBuf>,
 }
 
 impl App {
@@ -249,6 +258,8 @@ impl App {
             show_help: false,
             output: None,
             clipboard_file: None,
+            rename_input: String::new(),
+            rename_target: None,
         };
 
         // Load file tree
@@ -362,6 +373,7 @@ impl App {
             AppMode::Search => self.handle_search_mode_key(key)?,
             AppMode::Command => self.handle_command_mode_key(key)?,
             AppMode::Filter => self.handle_filter_mode_key(key)?,
+            AppMode::Rename => self.handle_rename_mode_key(key)?,
         }
 
         Ok(())
@@ -530,6 +542,11 @@ impl App {
             // Paste file from clipboard (P = paste file)
             KeyCode::Char('P') => {
                 self.paste_file_from_clipboard();
+            }
+
+            // Rename file (n = name/rename file)
+            KeyCode::Char('n') => {
+                self.start_rename();
             }
 
             _ => {}
@@ -719,6 +736,42 @@ impl App {
             KeyCode::Char(c) => {
                 self.filter_query.push(c);
                 self.file_tree_index = 0;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Handle key events in rename mode.
+    ///
+    /// Allows user to type a new filename for the selected file.
+    /// - Enter: Execute the rename operation
+    /// - Esc: Cancel and return to normal mode
+    /// - Backspace: Delete last character
+    /// - Any char: Append to rename input
+    fn handle_rename_mode_key(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                // Cancel rename operation
+                self.mode = AppMode::Normal;
+                self.rename_input.clear();
+                self.rename_target = None;
+                self.set_status("Rename cancelled", StatusLevel::Info);
+            }
+            KeyCode::Enter => {
+                // Execute the rename
+                self.execute_rename();
+                self.mode = AppMode::Normal;
+            }
+            KeyCode::Backspace => {
+                self.rename_input.pop();
+            }
+            KeyCode::Char(c) => {
+                // Only allow valid filename characters
+                if c != '/' && c != '\\' && c != '\0' {
+                    self.rename_input.push(c);
+                }
             }
             _ => {}
         }
@@ -1455,6 +1508,131 @@ impl App {
             }
             Err(e) => {
                 self.set_status(&format!("Paste failed: {}", e), StatusLevel::Error);
+            }
+        }
+    }
+
+    /// Start the rename operation for the currently selected file.
+    ///
+    /// This function initiates rename mode and pre-fills the input with the current filename.
+    /// Only works when the file browser panel is active and a file (not directory) is selected.
+    ///
+    /// # Behavior
+    /// - Only files can be renamed, not directories
+    /// - The current filename is pre-filled in the rename input
+    /// - User can edit the name and press Enter to confirm or Esc to cancel
+    ///
+    /// # Keyboard Shortcut
+    /// `n` - Start rename for selected file
+    fn start_rename(&mut self) {
+        // Ensure we're in the file browser panel
+        if self.active_panel != ActivePanel::FileBrowser {
+            self.set_status("Rename only works in file browser", StatusLevel::Warning);
+            return;
+        }
+
+        // Get the selected entry info (clone to avoid borrow issues)
+        let entry_info = self.get_selected_file_entry().map(|e| (e.path.clone(), e.name.clone(), e.is_dir));
+
+        if let Some((path, name, is_dir)) = entry_info {
+            // Directories cannot be renamed (for now)
+            if is_dir {
+                self.set_status("Cannot rename directories", StatusLevel::Warning);
+                return;
+            }
+
+            // Store the target path and pre-fill with current name
+            self.rename_target = Some(path);
+            self.rename_input = name;
+            self.mode = AppMode::Rename;
+            self.set_status("Enter new name (Enter to confirm, Esc to cancel)", StatusLevel::Info);
+        } else {
+            self.set_status("No file selected", StatusLevel::Warning);
+        }
+    }
+
+    /// Execute the rename operation with the current input.
+    ///
+    /// Renames the file stored in `rename_target` to the new name in `rename_input`.
+    /// Handles validation and error cases.
+    ///
+    /// # Validation
+    /// - New name cannot be empty
+    /// - New name cannot already exist in the same directory
+    /// - Must preserve .hurl extension for hurl files
+    fn execute_rename(&mut self) {
+        let Some(source_path) = self.rename_target.take() else {
+            self.set_status("No file to rename", StatusLevel::Error);
+            return;
+        };
+
+        let new_name = self.rename_input.trim().to_string();
+        self.rename_input.clear();
+
+        // Validate new name
+        if new_name.is_empty() {
+            self.set_status("Filename cannot be empty", StatusLevel::Error);
+            return;
+        }
+
+        // Check for invalid characters (additional safety)
+        if new_name.contains('/') || new_name.contains('\\') {
+            self.set_status("Filename cannot contain path separators", StatusLevel::Error);
+            return;
+        }
+
+        // Ensure .hurl extension is preserved for hurl files
+        let new_name = if source_path.extension().map_or(false, |e| e == "hurl") 
+            && !new_name.ends_with(".hurl") {
+            format!("{}.hurl", new_name)
+        } else {
+            new_name
+        };
+
+        // Build target path in the same directory
+        let Some(parent_dir) = source_path.parent() else {
+            self.set_status("Cannot determine parent directory", StatusLevel::Error);
+            return;
+        };
+        let target_path = parent_dir.join(&new_name);
+
+        // Check if target already exists
+        if target_path.exists() && target_path != source_path {
+            self.set_status(&format!("File '{}' already exists", new_name), StatusLevel::Error);
+            return;
+        }
+
+        // If name unchanged, just return
+        if target_path == source_path {
+            self.set_status("Name unchanged", StatusLevel::Info);
+            return;
+        }
+
+        // Perform the rename
+        match std::fs::rename(&source_path, &target_path) {
+            Ok(_) => {
+                let old_name = source_path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                self.set_status(&format!("Renamed: {} -> {}", old_name, new_name), StatusLevel::Success);
+
+                // Update current_file_path if the renamed file was open
+                if self.current_file_path.as_ref() == Some(&source_path) {
+                    self.current_file_path = Some(target_path.clone());
+                }
+
+                // Clear clipboard if it referenced the renamed file
+                if self.clipboard_file.as_ref() == Some(&source_path) {
+                    self.clipboard_file = Some(target_path);
+                }
+
+                // Refresh file tree to show the renamed file
+                if let Err(e) = self.refresh_file_tree() {
+                    self.set_status(&format!("Renamed but refresh failed: {}", e), StatusLevel::Warning);
+                }
+            }
+            Err(e) => {
+                self.set_status(&format!("Rename failed: {}", e), StatusLevel::Error);
             }
         }
     }

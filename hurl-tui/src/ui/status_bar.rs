@@ -85,6 +85,20 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(HackerTheme::AMBER_WARNING).bg(HackerTheme::DARK_BG),
             ));
         }
+        AppMode::Rename => {
+            spans.push(Span::styled(
+                format!(" {} RENAME ", BoxChars::SCANNER),
+                Style::default()
+                    .fg(HackerTheme::MODE_EDIT_FG)
+                    .bg(HackerTheme::MODE_EDIT_BG)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
+            spans.push(Span::styled(
+                format!("{}_", app.rename_input),
+                Style::default().fg(HackerTheme::CYBER_CYAN).bg(HackerTheme::DARK_BG),
+            ));
+        }
     }
 
     spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
