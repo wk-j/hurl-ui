@@ -1,37 +1,45 @@
 //! Assertions panel
 //!
-//! Displays assertion results from Hurl execution.
+//! Displays assertion results with hacker terminal aesthetic.
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
 
 use crate::app::{ActivePanel, App};
+use super::theme::{HackerTheme, BoxChars};
 
 /// Render the assertions panel
 pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
     let is_active = app.active_panel == ActivePanel::Assertions;
 
     let border_color = if is_active {
-        Color::Cyan
+        HackerTheme::MATRIX_GREEN
     } else {
-        Color::DarkGray
+        HackerTheme::BORDER_DIM
     };
 
     let block = Block::default()
-        .title(" Assertions ")
+        .title(format!(" {} Assertions ", BoxChars::CHECK))
+        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(HackerTheme::VOID_BLACK));
 
     // Check if we have execution results
     let Some(result) = &app.execution_result else {
-        let placeholder = Paragraph::new("No assertions to display.")
-            .style(Style::default().fg(Color::DarkGray))
-            .block(block);
+        let placeholder = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  {} No test results", BoxChars::DOT),
+                Style::default().fg(HackerTheme::TEXT_MUTED)
+            )),
+        ])
+        .block(block);
         frame.render_widget(placeholder, area);
         return;
     };
@@ -51,18 +59,22 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
         let passed = result.assertions.iter().filter(|a| a.success).count();
         let total = result.assertions.len();
 
-        // Summary line
-        let summary_color = if passed == total {
-            Color::Green
+        // Summary line with hacker styling
+        let (summary_color, summary_icon) = if passed == total {
+            (HackerTheme::ASSERT_PASS, BoxChars::CHECK)
         } else if passed > 0 {
-            Color::Yellow
+            (HackerTheme::AMBER_WARNING, BoxChars::DIAMOND)
         } else {
-            Color::Red
+            (HackerTheme::ASSERT_FAIL, BoxChars::CROSS)
         };
 
         lines.push(Line::from(vec![
             Span::styled(
-                format!("{}/{} passed", passed, total),
+                format!(" {} ", summary_icon),
+                Style::default().fg(summary_color),
+            ),
+            Span::styled(
+                format!("{}/{} PASSED", passed, total),
                 Style::default()
                     .fg(summary_color)
                     .add_modifier(Modifier::BOLD),
@@ -76,22 +88,22 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
 
         for assertion in result.assertions.iter().skip(scroll).take(visible_height) {
             let (icon, color) = if assertion.success {
-                ("v", Color::Green)
+                (BoxChars::CHECK, HackerTheme::ASSERT_PASS)
             } else {
-                ("x", Color::Red)
+                (BoxChars::CROSS, HackerTheme::ASSERT_FAIL)
             };
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!(" {} ", icon),
+                    format!("  {} ", icon),
                     Style::default().fg(color).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     assertion.text.clone(),
                     Style::default().fg(if assertion.success {
-                        Color::White
+                        HackerTheme::TEXT_PRIMARY
                     } else {
-                        Color::Red
+                        HackerTheme::ASSERT_FAIL
                     }),
                 ),
             ]));
@@ -100,20 +112,20 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
             if !assertion.success {
                 if let Some(expected) = &assertion.expected {
                     lines.push(Line::from(Span::styled(
-                        format!("     expected: {}", expected),
-                        Style::default().fg(Color::DarkGray),
+                        format!("      {} expected: {}", BoxChars::DOT, expected),
+                        Style::default().fg(HackerTheme::TEXT_MUTED),
                     )));
                 }
                 if let Some(actual) = &assertion.actual {
                     lines.push(Line::from(Span::styled(
-                        format!("     actual:   {}", actual),
-                        Style::default().fg(Color::DarkGray),
+                        format!("      {} actual:   {}", BoxChars::DOT, actual),
+                        Style::default().fg(HackerTheme::TEXT_MUTED),
                     )));
                 }
                 if let Some(message) = &assertion.message {
                     lines.push(Line::from(Span::styled(
-                        format!("     {}", message),
-                        Style::default().fg(Color::Red),
+                        format!("      {} {}", BoxChars::CROSS, message),
+                        Style::default().fg(HackerTheme::NEON_RED),
                     )));
                 }
             }
@@ -122,40 +134,43 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
         // Show assertions from file if no execution results
         if asserts.is_empty() {
             lines.push(Line::from(Span::styled(
-                "No assertions defined",
-                Style::default().fg(Color::DarkGray),
+                format!("  {} No assertions defined", BoxChars::DOT),
+                Style::default().fg(HackerTheme::TEXT_MUTED),
             )));
         } else {
             lines.push(Line::from(Span::styled(
-                format!("{} assertions defined", asserts.len()),
-                Style::default().fg(Color::Yellow),
+                format!("  {} {} tests pending", BoxChars::BULLET, asserts.len()),
+                Style::default().fg(HackerTheme::ASSERT_PENDING),
             )));
             lines.push(Line::from(""));
 
             for assert in asserts.iter().take(10) {
                 lines.push(Line::from(vec![
-                    Span::styled(" - ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(assert.text.clone(), Style::default().fg(Color::White)),
+                    Span::styled(
+                        format!("  {} ", BoxChars::DOT),
+                        Style::default().fg(HackerTheme::TEXT_MUTED),
+                    ),
+                    Span::styled(assert.text.clone(), Style::default().fg(HackerTheme::TEXT_SECONDARY)),
                 ]));
             }
 
             if asserts.len() > 10 {
                 lines.push(Line::from(Span::styled(
-                    format!("   ... and {} more", asserts.len() - 10),
-                    Style::default().fg(Color::DarkGray),
+                    format!("    {} +{} more...", BoxChars::DOT, asserts.len() - 10),
+                    Style::default().fg(HackerTheme::TEXT_MUTED),
                 )));
             }
 
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
-                "Press 'r' to run",
-                Style::default().fg(Color::Cyan),
+                format!("  {} Press [r] to execute", BoxChars::TERMINAL_PROMPT),
+                Style::default().fg(HackerTheme::MATRIX_GREEN_DIM),
             )));
         }
     } else {
         lines.push(Line::from(Span::styled(
-            "Open a .hurl file to see assertions",
-            Style::default().fg(Color::DarkGray),
+            format!("  {} Load a .hurl file", BoxChars::DOT),
+            Style::default().fg(HackerTheme::TEXT_MUTED),
         )));
     }
 

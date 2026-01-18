@@ -9,6 +9,7 @@ mod help;
 mod layout;
 mod response;
 mod status_bar;
+pub mod theme;
 mod variables;
 
 use ratatui::Frame;

@@ -1,10 +1,9 @@
 //! Help overlay
 //!
-//! Displays a help popup with keyboard shortcuts.
+//! Displays a help popup with keyboard shortcuts in hacker terminal style.
 
 use ratatui::{
-    layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -12,6 +11,7 @@ use ratatui::{
 
 use crate::app::App;
 use super::layout::centered_rect;
+use super::theme::{HackerTheme, BoxChars};
 
 /// Render the help overlay
 pub fn render_help(frame: &mut Frame, _app: &App) {
@@ -21,160 +21,82 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
     frame.render_widget(Clear, area);
 
     let block = Block::default()
-        .title(" Help ")
+        .title(format!(" {} SYSTEM MANUAL ", BoxChars::TERMINAL_PROMPT))
+        .title_style(Style::default().fg(HackerTheme::MATRIX_GREEN).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(HackerTheme::MATRIX_GREEN))
+        .style(Style::default().bg(HackerTheme::VOID_BLACK));
 
     let help_text = vec![
         Line::from(Span::styled(
-            "Hurl TUI - Keyboard Shortcuts",
+            format!("{} HURL-TUI :: COMMAND REFERENCE {}", BoxChars::GLITCH_2, BoxChars::GLITCH_2),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(HackerTheme::MATRIX_GREEN_BRIGHT)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            "Navigation",
+            format!("{} NAVIGATION", BoxChars::TRIANGLE_RIGHT),
             Style::default()
-                .fg(Color::Yellow)
+                .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(vec![
-            Span::styled("  j/k or Up/Down  ", Style::default().fg(Color::Green)),
-            Span::styled("Move up/down", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  h/l            ", Style::default().fg(Color::Green)),
-            Span::styled("Switch panels left/right", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Tab/Shift+Tab   ", Style::default().fg(Color::Green)),
-            Span::styled("Cycle through panels", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  g/G             ", Style::default().fg(Color::Green)),
-            Span::styled("Go to top/bottom", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Ctrl+d/Ctrl+u   ", Style::default().fg(Color::Green)),
-            Span::styled("Page down/up", Style::default().fg(Color::White)),
-        ]),
+        help_line("j/k Up/Down", "Move cursor"),
+        help_line("h/l", "Switch panels"),
+        help_line("Tab/S-Tab", "Cycle panels"),
+        help_line("g/G", "Jump to start/end"),
+        help_line("^d/^u", "Page down/up"),
         Line::from(""),
         Line::from(Span::styled(
-            "File Browser",
+            format!("{} FILE BROWSER", BoxChars::TRIANGLE_RIGHT),
             Style::default()
-                .fg(Color::Yellow)
+                .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(vec![
-            Span::styled("  Enter           ", Style::default().fg(Color::Green)),
-            Span::styled("Open file / Toggle folder", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Space           ", Style::default().fg(Color::Green)),
-            Span::styled("Expand/collapse folder", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  R               ", Style::default().fg(Color::Green)),
-            Span::styled("Refresh file tree", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  /               ", Style::default().fg(Color::Green)),
-            Span::styled("Search files", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  f               ", Style::default().fg(Color::Green)),
-            Span::styled("Filter files by name", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  F               ", Style::default().fg(Color::Green)),
-            Span::styled("Clear filter", Style::default().fg(Color::White)),
-        ]),
+        help_line("Enter", "Open file / Toggle dir"),
+        help_line("Space", "Expand/collapse dir"),
+        help_line("R", "Refresh tree"),
+        help_line("/", "Search files"),
+        help_line("f / F", "Filter / Clear filter"),
         Line::from(""),
         Line::from(Span::styled(
-            "Actions",
+            format!("{} ACTIONS", BoxChars::TRIANGLE_RIGHT),
             Style::default()
-                .fg(Color::Yellow)
+                .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(vec![
-            Span::styled("  r               ", Style::default().fg(Color::Green)),
-            Span::styled("Run current request", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  e               ", Style::default().fg(Color::Green)),
-            Span::styled("Enter edit mode", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  v               ", Style::default().fg(Color::Green)),
-            Span::styled("Toggle variables panel", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  E               ", Style::default().fg(Color::Green)),
-            Span::styled("Cycle environment", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  y               ", Style::default().fg(Color::Green)),
-            Span::styled("Copy file path to clipboard", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Y               ", Style::default().fg(Color::Green)),
-            Span::styled("Copy response to clipboard", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  c               ", Style::default().fg(Color::Green)),
-            Span::styled("Copy AI context (request+response)", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  o               ", Style::default().fg(Color::Green)),
-            Span::styled("Output AI context to stdout & quit", Style::default().fg(Color::White)),
-        ]),
+        help_line("r", "Execute request"),
+        help_line("e", "Edit mode"),
+        help_line("v", "Variables panel"),
+        help_line("E", "Cycle environment"),
+        help_line("y / Y", "Copy path / response"),
+        help_line("c", "Copy AI context"),
+        help_line("o", "Output context & quit"),
         Line::from(""),
         Line::from(Span::styled(
-            "Commands (press : first)",
+            format!("{} COMMANDS", BoxChars::TRIANGLE_RIGHT),
             Style::default()
-                .fg(Color::Yellow)
+                .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(vec![
-            Span::styled("  :w              ", Style::default().fg(Color::Green)),
-            Span::styled("Save file", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  :q              ", Style::default().fg(Color::Green)),
-            Span::styled("Quit", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  :wq             ", Style::default().fg(Color::Green)),
-            Span::styled("Save and quit", Style::default().fg(Color::White)),
-        ]),
+        help_line(":w", "Save file"),
+        help_line(":q", "Quit"),
+        help_line(":wq", "Save and quit"),
         Line::from(""),
         Line::from(Span::styled(
-            "General",
+            format!("{} GENERAL", BoxChars::TRIANGLE_RIGHT),
             Style::default()
-                .fg(Color::Yellow)
+                .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(vec![
-            Span::styled("  ?               ", Style::default().fg(Color::Green)),
-            Span::styled("Toggle this help", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  q               ", Style::default().fg(Color::Green)),
-            Span::styled("Quit / Close help", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Esc             ", Style::default().fg(Color::Green)),
-            Span::styled("Cancel / Exit mode", Style::default().fg(Color::White)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Ctrl+c          ", Style::default().fg(Color::Green)),
-            Span::styled("Force quit", Style::default().fg(Color::White)),
-        ]),
+        help_line("?", "Toggle help"),
+        help_line("q", "Quit / Close"),
+        help_line("Esc", "Cancel / Exit mode"),
+        help_line("^c", "Force quit"),
         Line::from(""),
         Line::from(Span::styled(
-            "Press 'q' or '?' to close this help",
-            Style::default().fg(Color::DarkGray),
+            format!("{} Press [q] or [?] to close {}", BoxChars::DOT, BoxChars::DOT),
+            Style::default().fg(HackerTheme::TEXT_MUTED),
         )),
     ];
 
@@ -183,4 +105,22 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
         .wrap(Wrap { trim: false });
 
     frame.render_widget(paragraph, area);
+}
+
+/// Create a help line with key and description
+fn help_line(key: &str, desc: &str) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            format!("  {} ", BoxChars::DOT),
+            Style::default().fg(HackerTheme::TEXT_MUTED),
+        ),
+        Span::styled(
+            format!("{:14}", key),
+            Style::default().fg(HackerTheme::MATRIX_GREEN),
+        ),
+        Span::styled(
+            desc.to_string(),
+            Style::default().fg(HackerTheme::TEXT_PRIMARY),
+        ),
+    ])
 }

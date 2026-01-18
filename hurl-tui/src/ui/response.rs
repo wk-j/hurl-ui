@@ -1,16 +1,17 @@
 //! Response panel
 //!
-//! Displays HTTP response details including status, headers, and body.
+//! Displays HTTP response details with cyberpunk hacker aesthetic.
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Tabs, Wrap},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
 
 use crate::app::{ActivePanel, App};
+use super::theme::{HackerTheme, BoxChars};
 
 /// Response view tab
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,34 +26,51 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
     let is_active = app.active_panel == ActivePanel::Response;
 
     let border_color = if is_active {
-        Color::Cyan
+        HackerTheme::MATRIX_GREEN
     } else {
-        Color::DarkGray
+        HackerTheme::BORDER_DIM
     };
 
     let block = Block::default()
-        .title(" Response ")
+        .title(format!(" {} Response ", BoxChars::ARROW_RIGHT))
+        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(HackerTheme::VOID_BLACK));
 
     // Check if we have a response
     let Some(result) = &app.execution_result else {
-        let placeholder = Paragraph::new("No response yet. Press 'r' to run the request.")
-            .style(Style::default().fg(Color::DarkGray))
-            .block(block);
+        let placeholder = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  {} Awaiting response data...", BoxChars::DOT),
+                Style::default().fg(HackerTheme::TEXT_MUTED)
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  {} Press [r] to execute request", BoxChars::TERMINAL_PROMPT),
+                Style::default().fg(HackerTheme::TEXT_SECONDARY)
+            )),
+        ])
+        .block(block);
         frame.render_widget(placeholder, area);
         return;
     };
 
     let Some(response) = &result.response else {
         let error_msg = if result.success {
-            "Response data not available"
+            format!("{} Response data unavailable", BoxChars::DOT)
         } else {
-            "Request failed. Check stderr for details."
+            format!("{} REQUEST FAILED - Check stderr", BoxChars::CROSS)
         };
-        let error = Paragraph::new(error_msg)
-            .style(Style::default().fg(Color::Red))
-            .block(block);
+        let error = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  {}", error_msg),
+                Style::default().fg(if result.success { HackerTheme::TEXT_MUTED } else { HackerTheme::NEON_RED })
+            )),
+        ])
+        .block(block);
         frame.render_widget(error, area);
         return;
     };
@@ -60,17 +78,29 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
     // Build response content
     let mut lines: Vec<Line> = Vec::new();
 
-    // Status line
+    // Status line with cyber colors
     let status_color = match response.status_code {
-        200..=299 => Color::Green,
-        300..=399 => Color::Yellow,
-        400..=499 => Color::Red,
-        500..=599 => Color::Magenta,
-        _ => Color::White,
+        200..=299 => HackerTheme::STATUS_2XX,
+        300..=399 => HackerTheme::STATUS_3XX,
+        400..=499 => HackerTheme::STATUS_4XX,
+        500..=599 => HackerTheme::STATUS_5XX,
+        _ => HackerTheme::TEXT_PRIMARY,
+    };
+
+    let status_icon = match response.status_code {
+        200..=299 => BoxChars::CHECK,
+        300..=399 => BoxChars::ARROW_RIGHT,
+        400..=499 => BoxChars::CROSS,
+        500..=599 => BoxChars::CROSS,
+        _ => BoxChars::DOT,
     };
 
     lines.push(Line::from(vec![
-        Span::styled("Status: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format!(" {} ", status_icon),
+            Style::default().fg(status_color),
+        ),
+        Span::styled("STATUS ", Style::default().fg(HackerTheme::TEXT_MUTED)),
         Span::styled(
             format!("{}", response.status_code),
             Style::default()
@@ -79,34 +109,42 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::styled("  ", Style::default()),
         Span::styled(
-            format!("Time: {}ms", response.duration_ms),
-            Style::default().fg(Color::Cyan),
+            format!("{} ", BoxChars::DOT),
+            Style::default().fg(HackerTheme::TEXT_MUTED),
+        ),
+        Span::styled(
+            format!("{}ms", response.duration_ms),
+            Style::default().fg(HackerTheme::CYBER_CYAN),
         ),
     ]));
 
     lines.push(Line::from(""));
 
-    // Headers section (collapsed)
+    // Headers section
     if !response.headers.is_empty() {
         lines.push(Line::from(Span::styled(
-            format!("Headers ({})", response.headers.len()),
+            format!("{} HEADERS [{}]", BoxChars::TRIANGLE_DOWN, response.headers.len()),
             Style::default()
-                .fg(Color::Yellow)
+                .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
         )));
 
         // Show first few headers
         for (name, value) in response.headers.iter().take(5) {
             lines.push(Line::from(vec![
-                Span::styled(format!("  {}: ", name), Style::default().fg(Color::Blue)),
-                Span::styled(value.clone(), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("  {} ", BoxChars::DOT),
+                    Style::default().fg(HackerTheme::TEXT_MUTED),
+                ),
+                Span::styled(format!("{}: ", name), Style::default().fg(HackerTheme::SYNTAX_HEADER)),
+                Span::styled(value.clone(), Style::default().fg(HackerTheme::SYNTAX_VALUE)),
             ]));
         }
 
         if response.headers.len() > 5 {
             lines.push(Line::from(Span::styled(
-                format!("  ... and {} more", response.headers.len() - 5),
-                Style::default().fg(Color::DarkGray),
+                format!("    {} +{} more...", BoxChars::DOT, response.headers.len() - 5),
+                Style::default().fg(HackerTheme::TEXT_MUTED),
             )));
         }
 
@@ -115,9 +153,9 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
 
     // Body section
     lines.push(Line::from(Span::styled(
-        "Body:",
+        format!("{} BODY", BoxChars::TRIANGLE_DOWN),
         Style::default()
-            .fg(Color::Yellow)
+            .fg(HackerTheme::SYNTAX_SECTION)
             .add_modifier(Modifier::BOLD),
     )));
 
@@ -129,7 +167,7 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
     for line in body_lines.iter().skip(scroll).take(visible_height) {
         lines.push(Line::from(Span::styled(
             format!("  {}", line),
-            Style::default().fg(Color::White),
+            Style::default().fg(HackerTheme::SYNTAX_DATA),
         )));
     }
 
@@ -138,8 +176,8 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
         let total = body_lines.len();
         let visible_end = (scroll + visible_height).min(total);
         lines.push(Line::from(Span::styled(
-            format!("  [{}-{}/{}]", scroll + 1, visible_end, total),
-            Style::default().fg(Color::DarkGray),
+            format!("  {} [{}-{}/{}]", BoxChars::GLITCH_1, scroll + 1, visible_end, total),
+            Style::default().fg(HackerTheme::TEXT_MUTED),
         )));
     }
 

@@ -1,16 +1,17 @@
 //! Editor panel
 //!
-//! Displays and allows editing of Hurl file content.
+//! Displays and allows editing of Hurl file content with hacker aesthetic.
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
 
 use crate::app::{ActivePanel, App, AppMode};
+use super::theme::{HackerTheme, BoxChars};
 
 /// Render the editor panel
 pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
@@ -19,37 +20,55 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
 
     let title = match (&app.current_file_path, is_editing) {
         (Some(path), true) => format!(
-            " {} [EDITING] ",
+            " {} {} [EDITING] ",
+            BoxChars::TERMINAL_PROMPT,
             path.file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "untitled".to_string())
         ),
         (Some(path), false) => format!(
-            " {} ",
+            " {} {} ",
+            BoxChars::LAMBDA,
             path.file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "untitled".to_string())
         ),
-        (None, _) => " Editor ".to_string(),
+        (None, _) => format!(" {} Editor ", BoxChars::LAMBDA),
     };
 
     let border_color = if is_editing {
-        Color::Yellow
+        HackerTheme::MODE_EDIT_FG
     } else if is_active {
-        Color::Cyan
+        HackerTheme::MATRIX_GREEN
     } else {
-        Color::DarkGray
+        HackerTheme::BORDER_DIM
     };
 
     let block = Block::default()
         .title(title)
+        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(HackerTheme::VOID_BLACK));
 
     if app.editor_content.is_empty() {
-        let placeholder = Paragraph::new("No file selected. Press Enter on a .hurl file to open it.")
-            .style(Style::default().fg(Color::DarkGray))
-            .block(block);
+        let placeholder = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  {} No file loaded", BoxChars::DOT),
+                Style::default().fg(HackerTheme::TEXT_MUTED)
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  {} Select a .hurl file to begin", BoxChars::ARROW_RIGHT),
+                Style::default().fg(HackerTheme::TEXT_SECONDARY)
+            )),
+            Line::from(Span::styled(
+                format!("  {} Press [Enter] to open", BoxChars::ARROW_RIGHT),
+                Style::default().fg(HackerTheme::TEXT_SECONDARY)
+            )),
+        ])
+        .block(block);
         frame.render_widget(placeholder, area);
         return;
     }
@@ -66,12 +85,12 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
         .skip(scroll)
         .take(inner_height)
         .map(|(line_num, content)| {
-            let line_number = format!("{:4} ", line_num + 1);
+            let line_number = format!("{:4} {} ", line_num + 1, BoxChars::VERTICAL);
             let styled_content = highlight_hurl_line(content);
 
             let mut spans = vec![Span::styled(
                 line_number,
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(HackerTheme::TEXT_MUTED),
             )];
 
             // If editing and cursor is on this line, show cursor
@@ -89,8 +108,8 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
                 spans.push(Span::styled(
                     cursor_char.to_string(),
                     Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::White)
+                        .fg(HackerTheme::CURSOR_FG)
+                        .bg(HackerTheme::CURSOR_BG)
                         .add_modifier(Modifier::BOLD),
                 ));
                 spans.extend(highlight_hurl_spans(after));
@@ -121,7 +140,7 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
 
     // Comments
     if trimmed.starts_with('#') {
-        return vec![Span::styled(text, Style::default().fg(Color::DarkGray))];
+        return vec![Span::styled(text, Style::default().fg(HackerTheme::TEXT_COMMENT))];
     }
 
     // HTTP methods
@@ -134,10 +153,10 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
                 Span::styled(
                     method_part.to_string(),
                     Style::default()
-                        .fg(Color::Green)
+                        .fg(HackerTheme::SYNTAX_METHOD)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(rest.to_string(), Style::default().fg(Color::Cyan)),
+                Span::styled(rest.to_string(), Style::default().fg(HackerTheme::SYNTAX_URL)),
             ];
         }
     }
@@ -147,7 +166,7 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
         return vec![Span::styled(
             text,
             Style::default()
-                .fg(Color::Magenta)
+                .fg(HackerTheme::SYNTAX_STATUS)
                 .add_modifier(Modifier::BOLD),
         )];
     }
@@ -157,7 +176,7 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
         return vec![Span::styled(
             text,
             Style::default()
-                .fg(Color::Yellow)
+                .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
         )];
     }
@@ -167,8 +186,8 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
         if let Some(colon_pos) = trimmed.find(':') {
             let (name, rest) = trimmed.split_at(colon_pos);
             return vec![
-                Span::styled(name.to_string(), Style::default().fg(Color::Blue)),
-                Span::styled(rest.to_string(), Style::default().fg(Color::White)),
+                Span::styled(name.to_string(), Style::default().fg(HackerTheme::SYNTAX_HEADER)),
+                Span::styled(rest.to_string(), Style::default().fg(HackerTheme::SYNTAX_VALUE)),
             ];
         }
     }
@@ -182,7 +201,7 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
         if trimmed.starts_with(keyword) {
             return vec![Span::styled(
                 text,
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(HackerTheme::SYNTAX_KEYWORD),
             )];
         }
     }
@@ -191,15 +210,15 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
     if trimmed.contains("{{") && trimmed.contains("}}") {
         return vec![Span::styled(
             text,
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(HackerTheme::SYNTAX_VARIABLE),
         )];
     }
 
     // JSON content
     if trimmed.starts_with('{') || trimmed.starts_with('[') || trimmed.starts_with('"') {
-        return vec![Span::styled(text, Style::default().fg(Color::White))];
+        return vec![Span::styled(text, Style::default().fg(HackerTheme::SYNTAX_DATA))];
     }
 
     // Default
-    vec![Span::styled(text, Style::default().fg(Color::White))]
+    vec![Span::styled(text, Style::default().fg(HackerTheme::TEXT_PRIMARY))]
 }
