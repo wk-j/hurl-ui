@@ -906,8 +906,13 @@ impl App {
                     continue;
                 }
 
-                // Only include directories and .hurl files
-                if path.is_dir() || path.extension().map_or(false, |e| e == "hurl") {
+                // Only include .hurl files and directories that contain .hurl files
+                if path.is_dir() {
+                    // Only include directories that contain .hurl files (recursively)
+                    if Self::dir_contains_hurl(&path) {
+                        entries.push(FileEntry::new(path, depth));
+                    }
+                } else if path.extension().map_or(false, |e| e == "hurl") {
                     entries.push(FileEntry::new(path, depth));
                 }
             }
