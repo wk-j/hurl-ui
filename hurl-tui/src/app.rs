@@ -11,6 +11,66 @@ use crate::config::Config;
 use crate::parser::HurlFile;
 use crate::runner::{ExecutionResult, Runner};
 
+/// Directories to skip when scanning for .hurl files
+/// These are common build output, dependency, and cache directories
+const IGNORED_DIRECTORIES: &[&str] = &[
+    // Node.js / JavaScript
+    "node_modules",
+    "bower_components",
+    ".npm",
+    ".yarn",
+    ".pnpm-store",
+    // Rust
+    "target",
+    // .NET / C#
+    "bin",
+    "obj",
+    "packages",
+    // Python
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".env",
+    "env",
+    ".tox",
+    ".pytest_cache",
+    ".mypy_cache",
+    // Java / Kotlin / Gradle / Maven
+    "build",
+    "out",
+    ".gradle",
+    ".mvn",
+    // Go
+    "vendor",
+    // PHP
+    "vendor",
+    // Ruby
+    ".bundle",
+    // General IDE / Editor
+    ".idea",
+    ".vscode",
+    ".vs",
+    // Version control
+    ".git",
+    ".svn",
+    ".hg",
+    // OS generated
+    ".DS_Store",
+    "Thumbs.db",
+    // Coverage / Test output
+    "coverage",
+    ".nyc_output",
+    "htmlcov",
+    // Docker
+    ".docker",
+    // Misc caches
+    ".cache",
+    ".parcel-cache",
+    ".next",
+    ".nuxt",
+    "dist",
+];
+
 /// Serializable state for persistence
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 struct PersistedState {
@@ -1032,8 +1092,30 @@ impl App {
         }
     }
 
+    /// Check if a directory should be skipped during scanning
+    /// Returns true for common build output, dependency, and cache directories
+    fn should_skip_directory(path: &PathBuf) -> bool {
+        path.file_name()
+            .map(|name| {
+                let name = name.to_string_lossy();
+                // Skip hidden directories
+                if name.starts_with('.') {
+                    return true;
+                }
+                // Skip known unnecessary directories (case-insensitive for cross-platform)
+                let name_lower = name.to_lowercase();
+                IGNORED_DIRECTORIES.iter().any(|&ignored| ignored.to_lowercase() == name_lower)
+            })
+            .unwrap_or(false)
+    }
+
     /// Check if a directory contains any .hurl files (recursively)
     fn dir_contains_hurl(path: &PathBuf) -> bool {
+        // Skip unnecessary directories
+        if Self::should_skip_directory(path) {
+            return false;
+        }
+
         if let Ok(read_dir) = std::fs::read_dir(path) {
             for entry in read_dir.flatten() {
                 let path = entry.path();
@@ -1056,11 +1138,8 @@ impl App {
             for entry in read_dir.flatten() {
                 let path = entry.path();
 
-                // Skip hidden files and directories
-                if path
-                    .file_name()
-                    .map_or(false, |n| n.to_string_lossy().starts_with('.'))
-                {
+                // Skip hidden files, build outputs, dependencies, and other unnecessary directories
+                if Self::should_skip_directory(&path) {
                     continue;
                 }
 
