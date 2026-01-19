@@ -13,7 +13,7 @@ A Terminal User Interface for [Hurl](https://hurl.dev/), the command-line tool f
 - **Request Execution**: Run Hurl requests directly from the TUI
 - **Response Viewer**: View formatted responses with JSON pretty-printing
 - **Assertions Panel**: See assertion results with pass/fail status
-- **Environment Variables**: Manage and switch between environments
+- **Environment Variables**: Manage and switch between environments with `.env` files
 - **Vim-style Navigation**: Familiar keyboard shortcuts for efficient navigation
 - **Clipboard Support**: Copy file paths and responses to clipboard
 - **Session Restore**: Remember last opened file per directory
@@ -123,6 +123,7 @@ When in edit mode (`e`), the editor uses vim-style keybindings:
 | `y` | Copy file path to clipboard |
 | `Y` | Copy response to clipboard |
 | `c` | Copy AI context (request + response + assertions) |
+| `C` | Copy hurl command to clipboard |
 | `o` | Output AI context to stdout and quit |
 
 ### AI Context Format
@@ -182,6 +183,41 @@ H = [
 Press `H` in Helix to open hurl-tui. Navigate to a `.hurl` file, run it with `r`, then press `o` to output the AI context to your buffer.
 
 The TUI works interactively even when stdout is piped, using `/dev/tty` for terminal access.
+
+## Environment Variables
+
+Place `.env` files anywhere in your project directory to define environment-specific variables:
+
+```
+my-project/
+├── api/
+│   └── users.hurl
+├── env/
+│   ├── local.env
+│   ├── staging.env
+│   └── production.env
+└── tests/
+    └── integration.hurl
+```
+
+Example `.env` file:
+```env
+# local.env
+base_url=http://localhost:8080
+api_key=dev-key-123
+timeout=30
+```
+
+Use variables in your `.hurl` files:
+```hurl
+GET {{base_url}}/users
+Authorization: Bearer {{api_key}}
+HTTP 200
+```
+
+- Press `E` to cycle between available environments
+- The selected environment is persisted across sessions
+- Variables are passed to hurl using `--variables-file`
 
 ## Configuration
 
