@@ -10,8 +10,8 @@ use ratatui::{
     Frame,
 };
 
+use super::theme::{BoxChars, HackerTheme};
 use crate::app::{ActivePanel, App};
-use super::theme::{HackerTheme, BoxChars};
 
 /// Render the variables panel
 pub fn render_variables(frame: &mut Frame, app: &App, area: Rect) {
@@ -25,7 +25,11 @@ pub fn render_variables(frame: &mut Frame, app: &App, area: Rect) {
 
     let block = Block::default()
         .title(format!(" {} Variables ", BoxChars::LAMBDA))
-        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(HackerTheme::VOID_BLACK));
@@ -70,17 +74,25 @@ pub fn render_variables(frame: &mut Frame, app: &App, area: Rect) {
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!("  {} ", if var.is_secret { BoxChars::BLOCK_FULL } else { BoxChars::DOT }),
-                    Style::default().fg(if var.is_secret { HackerTheme::NEON_RED } else { HackerTheme::TEXT_MUTED }),
+                    format!(
+                        "  {} ",
+                        if var.is_secret {
+                            BoxChars::BLOCK_FULL
+                        } else {
+                            BoxChars::DOT
+                        }
+                    ),
+                    Style::default().fg(if var.is_secret {
+                        HackerTheme::NEON_RED
+                    } else {
+                        HackerTheme::TEXT_MUTED
+                    }),
                 ),
                 Span::styled(
                     format!("{}: ", var.name),
                     Style::default().fg(HackerTheme::SYNTAX_VARIABLE),
                 ),
-                Span::styled(
-                    value_display,
-                    Style::default().fg(value_color),
-                ),
+                Span::styled(value_display, Style::default().fg(value_color)),
             ]));
         }
     }
@@ -92,9 +104,7 @@ pub fn render_variables(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(HackerTheme::TEXT_MUTED),
     )));
 
-    let paragraph = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: true });
+    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
 
     frame.render_widget(paragraph, area);
 }
@@ -102,9 +112,19 @@ pub fn render_variables(frame: &mut Frame, app: &App, area: Rect) {
 /// Mask a secret value
 fn mask_secret(value: &str) -> String {
     if value.len() <= 4 {
-        format!("{}{}{}", BoxChars::BLOCK_MEDIUM, BoxChars::BLOCK_MEDIUM, BoxChars::BLOCK_MEDIUM)
+        format!(
+            "{}{}{}",
+            BoxChars::BLOCK_MEDIUM,
+            BoxChars::BLOCK_MEDIUM,
+            BoxChars::BLOCK_MEDIUM
+        )
     } else {
-        format!("{}{}{}...", &value[..1], BoxChars::BLOCK_MEDIUM, BoxChars::BLOCK_MEDIUM)
+        format!(
+            "{}{}{}...",
+            &value[..1],
+            BoxChars::BLOCK_MEDIUM,
+            BoxChars::BLOCK_MEDIUM
+        )
     }
 }
 

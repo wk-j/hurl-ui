@@ -26,8 +26,8 @@ pub fn create_layout(area: Rect) -> AppLayout {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(10),    // Content area
-            Constraint::Length(1),  // Status bar
+            Constraint::Min(10),   // Content area
+            Constraint::Length(1), // Status bar
         ])
         .split(area);
 
@@ -38,8 +38,8 @@ pub fn create_layout(area: Rect) -> AppLayout {
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(20),  // Left sidebar
-            Constraint::Percentage(80),  // Main content
+            Constraint::Percentage(20), // Left sidebar
+            Constraint::Percentage(80), // Main content
         ])
         .split(content_area);
 
@@ -50,8 +50,8 @@ pub fn create_layout(area: Rect) -> AppLayout {
     let left_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(70),  // File browser
-            Constraint::Percentage(30),  // Variables
+            Constraint::Percentage(70), // File browser
+            Constraint::Percentage(30), // Variables
         ])
         .split(left_sidebar);
 
@@ -62,8 +62,8 @@ pub fn create_layout(area: Rect) -> AppLayout {
     let main_vertical_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(55),  // Editor
-            Constraint::Percentage(45),  // Results area
+            Constraint::Percentage(55), // Editor
+            Constraint::Percentage(45), // Results area
         ])
         .split(main_content);
 
@@ -74,8 +74,8 @@ pub fn create_layout(area: Rect) -> AppLayout {
     let results_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(60),  // Response
-            Constraint::Percentage(40),  // Assertions
+            Constraint::Percentage(60), // Response
+            Constraint::Percentage(40), // Assertions
         ])
         .split(results_area);
 

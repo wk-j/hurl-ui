@@ -51,20 +51,20 @@ impl Runner {
             .unwrap_or_else(|| "hurl".to_string());
 
         let mut cmd = Command::new(&hurl_cmd);
-        
+
         // Add the file path
         cmd.arg(file_path);
-        
+
         // Add JSON output for structured parsing
         cmd.arg("--json");
-        
+
         // Add verbose output for more details
         cmd.arg("--verbose");
-        
+
         // Add timeout
         cmd.arg("--max-time");
         cmd.arg(self.timeout.to_string());
-        
+
         // Add variables
         for (key, value) in variables {
             cmd.arg("--variable");
@@ -112,7 +112,9 @@ impl Runner {
                             .iter()
                             .map(|h| (h.name.clone(), h.value.clone()))
                             .collect(),
-                        body: entry.response.as_ref()
+                        body: entry
+                            .response
+                            .as_ref()
                             .and_then(|r| r.body.clone())
                             .unwrap_or_default(),
                         duration_ms: entry.time_in_ms.unwrap_or(0),
@@ -195,7 +197,7 @@ impl Runner {
             // Look for assertion output patterns
             // Success: "  jsonpath "$.id" exists"
             // Failure: "error: Assert failure" followed by details
-            
+
             if line.contains("Assert failure") || line.contains("assert failure") {
                 // This is a failed assertion
                 let text = line.trim().to_string();
@@ -324,7 +326,7 @@ mod tests {
         let runner = Runner::new()
             .with_hurl_path(PathBuf::from("/usr/bin/hurl"))
             .with_timeout(60);
-        
+
         assert_eq!(runner.hurl_path, Some(PathBuf::from("/usr/bin/hurl")));
         assert_eq!(runner.timeout, 60);
     }

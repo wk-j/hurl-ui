@@ -6,6 +6,7 @@ use anyhow::Result;
 use crossterm::event::{self, KeyEvent, MouseEvent};
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::time::interval;
 
 /// Terminal event types
 #[derive(Debug, Clone)]
@@ -34,11 +35,23 @@ impl EventHandler {
         let (tx, rx) = mpsc::unbounded_channel();
         let tick_rate_duration = Duration::from_millis(tick_rate);
 
-        // Spawn event polling task
+        // Spawn tick task - sends tick events at regular intervals
+        let tick_tx = tx.clone();
+        tokio::spawn(async move {
+            let mut tick_interval = interval(tick_rate_duration);
+            loop {
+                tick_interval.tick().await;
+                if tick_tx.send(Event::Tick).is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Spawn event polling task - handles input events
         tokio::spawn(async move {
             loop {
-                // Poll for events with timeout
-                if event::poll(tick_rate_duration).unwrap_or(false) {
+                // Poll for events with a short timeout to remain responsive
+                if event::poll(Duration::from_millis(1)).unwrap_or(false) {
                     match event::read() {
                         Ok(event::Event::Key(key)) => {
                             if tx.send(Event::Key(key)).is_err() {
@@ -59,10 +72,8 @@ impl EventHandler {
                         Err(_) => break,
                     }
                 } else {
-                    // No event, send tick
-                    if tx.send(Event::Tick).is_err() {
-                        break;
-                    }
+                    // Yield to prevent busy-spinning when no events
+                    tokio::task::yield_now().await;
                 }
             }
         });

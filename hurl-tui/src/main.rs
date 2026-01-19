@@ -5,6 +5,7 @@
 
 mod app;
 mod config;
+mod effects;
 mod events;
 mod parser;
 mod runner;
@@ -17,7 +18,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{fs::File, io::{self, Write}, path::PathBuf};
+use std::{fs::File, io, path::PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::app::App;
@@ -41,7 +42,7 @@ async fn main() -> Result<()> {
 
     // Open /dev/tty for interactive terminal (works even when stdout is piped)
     let tty = open_tty()?;
-    
+
     // Setup terminal using tty
     let mut terminal = setup_terminal(tty)?;
 
@@ -49,7 +50,8 @@ async fn main() -> Result<()> {
     let mut app = App::new(config, working_dir)?;
 
     // Create event handler
-    let event_handler = EventHandler::new(250); // 250ms tick rate
+    // Use 16ms tick rate (~60 FPS) for smooth animations
+    let event_handler = EventHandler::new(16);
 
     // Run the application
     let result = run_app(&mut terminal, &mut app, event_handler).await;
@@ -136,7 +138,7 @@ async fn run_app(
     mut event_handler: EventHandler,
 ) -> Result<()> {
     loop {
-        // Draw the UI
+        // Draw the UI (app is mutable for effect processing)
         terminal.draw(|frame| ui::draw(frame, app))?;
 
         // Handle events

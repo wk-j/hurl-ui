@@ -10,8 +10,8 @@ use ratatui::{
     Frame,
 };
 
+use super::theme::{BoxChars, HackerTheme};
 use crate::app::{ActivePanel, App};
-use super::theme::{HackerTheme, BoxChars};
 
 /// Response view tab
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,7 +33,11 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
 
     let block = Block::default()
         .title(format!(" {} Response ", BoxChars::ARROW_RIGHT))
-        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(HackerTheme::VOID_BLACK));
@@ -44,12 +48,15 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 format!("  {} Awaiting response data...", BoxChars::DOT),
-                Style::default().fg(HackerTheme::TEXT_MUTED)
+                Style::default().fg(HackerTheme::TEXT_MUTED),
             )),
             Line::from(""),
             Line::from(Span::styled(
-                format!("  {} Press [r] to execute request", BoxChars::TERMINAL_PROMPT),
-                Style::default().fg(HackerTheme::TEXT_SECONDARY)
+                format!(
+                    "  {} Press [r] to execute request",
+                    BoxChars::TERMINAL_PROMPT
+                ),
+                Style::default().fg(HackerTheme::TEXT_SECONDARY),
             )),
         ])
         .block(block);
@@ -67,7 +74,11 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 format!("  {}", error_msg),
-                Style::default().fg(if result.success { HackerTheme::TEXT_MUTED } else { HackerTheme::NEON_RED })
+                Style::default().fg(if result.success {
+                    HackerTheme::TEXT_MUTED
+                } else {
+                    HackerTheme::NEON_RED
+                }),
             )),
         ])
         .block(block);
@@ -123,7 +134,11 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
     // Headers section
     if !response.headers.is_empty() {
         lines.push(Line::from(Span::styled(
-            format!("{} HEADERS [{}]", BoxChars::TRIANGLE_DOWN, response.headers.len()),
+            format!(
+                "{} HEADERS [{}]",
+                BoxChars::TRIANGLE_DOWN,
+                response.headers.len()
+            ),
             Style::default()
                 .fg(HackerTheme::SYNTAX_SECTION)
                 .add_modifier(Modifier::BOLD),
@@ -136,14 +151,24 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
                     format!("  {} ", BoxChars::DOT),
                     Style::default().fg(HackerTheme::TEXT_MUTED),
                 ),
-                Span::styled(format!("{}: ", name), Style::default().fg(HackerTheme::SYNTAX_HEADER)),
-                Span::styled(value.clone(), Style::default().fg(HackerTheme::SYNTAX_VALUE)),
+                Span::styled(
+                    format!("{}: ", name),
+                    Style::default().fg(HackerTheme::SYNTAX_HEADER),
+                ),
+                Span::styled(
+                    value.clone(),
+                    Style::default().fg(HackerTheme::SYNTAX_VALUE),
+                ),
             ]));
         }
 
         if response.headers.len() > 5 {
             lines.push(Line::from(Span::styled(
-                format!("    {} +{} more...", BoxChars::DOT, response.headers.len() - 5),
+                format!(
+                    "    {} +{} more...",
+                    BoxChars::DOT,
+                    response.headers.len() - 5
+                ),
                 Style::default().fg(HackerTheme::TEXT_MUTED),
             )));
         }
@@ -176,7 +201,13 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
         let total = body_lines.len();
         let visible_end = (scroll + visible_height).min(total);
         lines.push(Line::from(Span::styled(
-            format!("  {} [{}-{}/{}]", BoxChars::GLITCH_1, scroll + 1, visible_end, total),
+            format!(
+                "  {} [{}-{}/{}]",
+                BoxChars::GLITCH_1,
+                scroll + 1,
+                visible_end,
+                total
+            ),
             Style::default().fg(HackerTheme::TEXT_MUTED),
         )));
     }

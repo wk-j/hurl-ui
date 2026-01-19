@@ -11,8 +11,8 @@ use ratatui::{
     Frame,
 };
 
+use super::theme::{BoxChars, HackerTheme};
 use crate::app::{App, AppMode, StatusLevel, VimMode};
-use super::theme::{HackerTheme, BoxChars};
 
 /// Render the status bar
 pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
@@ -32,15 +32,20 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::Editing => {
             // Show vim sub-mode (NORMAL or INSERT)
             let (vim_label, fg, bg) = match app.vim_mode {
-                VimMode::Normal => ("NORMAL", HackerTheme::MODE_NORMAL_FG, HackerTheme::MODE_NORMAL_BG),
-                VimMode::Insert => ("INSERT", HackerTheme::MODE_EDIT_FG, HackerTheme::MODE_EDIT_BG),
+                VimMode::Normal => (
+                    "NORMAL",
+                    HackerTheme::MODE_NORMAL_FG,
+                    HackerTheme::MODE_NORMAL_BG,
+                ),
+                VimMode::Insert => (
+                    "INSERT",
+                    HackerTheme::MODE_EDIT_FG,
+                    HackerTheme::MODE_EDIT_BG,
+                ),
             };
             spans.push(Span::styled(
                 format!(" {} {} ", BoxChars::SCANNER, vim_label),
-                Style::default()
-                    .fg(fg)
-                    .bg(bg)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
             ));
         }
         AppMode::Search => {
@@ -54,7 +59,9 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
             spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
             spans.push(Span::styled(
                 format!("/{}_", app.search_query),
-                Style::default().fg(HackerTheme::CYBER_CYAN).bg(HackerTheme::DARK_BG),
+                Style::default()
+                    .fg(HackerTheme::CYBER_CYAN)
+                    .bg(HackerTheme::DARK_BG),
             ));
         }
         AppMode::Command => {
@@ -68,7 +75,9 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
             spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
             spans.push(Span::styled(
                 format!(":{}_", app.command_input),
-                Style::default().fg(HackerTheme::ELECTRIC_PURPLE).bg(HackerTheme::DARK_BG),
+                Style::default()
+                    .fg(HackerTheme::ELECTRIC_PURPLE)
+                    .bg(HackerTheme::DARK_BG),
             ));
         }
         AppMode::Filter => {
@@ -82,7 +91,9 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
             spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
             spans.push(Span::styled(
                 format!(">{}_", app.filter_query),
-                Style::default().fg(HackerTheme::AMBER_WARNING).bg(HackerTheme::DARK_BG),
+                Style::default()
+                    .fg(HackerTheme::AMBER_WARNING)
+                    .bg(HackerTheme::DARK_BG),
             ));
         }
         AppMode::Rename => {
@@ -96,7 +107,9 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
             spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
             spans.push(Span::styled(
                 format!("{}_", app.rename_input),
-                Style::default().fg(HackerTheme::CYBER_CYAN).bg(HackerTheme::DARK_BG),
+                Style::default()
+                    .fg(HackerTheme::CYBER_CYAN)
+                    .bg(HackerTheme::DARK_BG),
             ));
         }
     }
@@ -127,7 +140,7 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     if app.is_running {
         let spinner = BoxChars::spinner(app.spinner_frame);
         let matrix_char = BoxChars::spinner_matrix(app.spinner_frame);
-        
+
         spans.push(Span::styled(
             format!(" {} ", spinner),
             Style::default()
@@ -155,12 +168,17 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     let shortcuts = match app.mode {
         AppMode::Normal => format!(
             " [r]un {} [e]dit {} [v]ars {} [?]help {} [q]uit ",
-            BoxChars::DOT, BoxChars::DOT, BoxChars::DOT, BoxChars::DOT
+            BoxChars::DOT,
+            BoxChars::DOT,
+            BoxChars::DOT,
+            BoxChars::DOT
         ),
         AppMode::Editing => match app.vim_mode {
             VimMode::Normal => format!(
                 " [i]nsert {} [a]ppend {} [o]pen {} [q]uit ",
-                BoxChars::DOT, BoxChars::DOT, BoxChars::DOT
+                BoxChars::DOT,
+                BoxChars::DOT,
+                BoxChars::DOT
             ),
             VimMode::Insert => format!(" [Esc] {} normal mode ", BoxChars::ARROW_RIGHT),
         },
@@ -180,11 +198,13 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
 
     spans.push(Span::styled(
         shortcuts,
-        Style::default().fg(HackerTheme::TEXT_MUTED).bg(HackerTheme::DARK_BG),
+        Style::default()
+            .fg(HackerTheme::TEXT_MUTED)
+            .bg(HackerTheme::DARK_BG),
     ));
 
-    let paragraph = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(HackerTheme::DARK_BG));
+    let paragraph =
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(HackerTheme::DARK_BG));
 
     frame.render_widget(paragraph, area);
 }

@@ -74,7 +74,7 @@ pub struct Capture {
 pub fn parse_hurl_file(content: &str) -> Result<HurlFile> {
     let mut entries = Vec::new();
     let lines: Vec<&str> = content.lines().collect();
-    
+
     let mut i = 0;
     while i < lines.len() {
         // Skip empty lines and comments
@@ -102,16 +102,17 @@ pub fn parse_hurl_file(content: &str) -> Result<HurlFile> {
 fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
     let line_start = *index;
     let line = lines[*index].trim();
-    
+
     // Parse method and URL
-    let method_regex = Regex::new(r"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\s+(.+)$").ok()?;
+    let method_regex =
+        Regex::new(r"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\s+(.+)$").ok()?;
     let caps = method_regex.captures(line)?;
-    
+
     let method = caps.get(1)?.as_str().to_string();
     let url = caps.get(2)?.as_str().to_string();
-    
+
     *index += 1;
-    
+
     let mut headers = Vec::new();
     let mut body = None;
     let mut expected_status = None;
@@ -126,7 +127,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
     while *index < lines.len() {
         let line = lines[*index];
         let trimmed = line.trim();
-        
+
         // Empty line might separate sections
         if trimmed.is_empty() {
             if in_body {
@@ -135,12 +136,12 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
+
         // Check if this is a new request (start of next entry)
         if method_regex.is_match(trimmed) {
             break;
         }
-        
+
         // HTTP response status line
         if trimmed.starts_with("HTTP") {
             let parts: Vec<&str> = trimmed.split_whitespace().collect();
@@ -154,7 +155,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
+
         // Section markers
         if trimmed == "[Asserts]" {
             in_asserts_section = true;
@@ -163,7 +164,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
+
         if trimmed == "[Captures]" {
             in_captures_section = true;
             in_asserts_section = false;
@@ -171,17 +172,21 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
-        if trimmed == "[Options]" || trimmed == "[QueryStringParams]" || 
-           trimmed == "[FormParams]" || trimmed == "[MultipartFormData]" ||
-           trimmed == "[Cookies]" || trimmed == "[BasicAuth]" {
+
+        if trimmed == "[Options]"
+            || trimmed == "[QueryStringParams]"
+            || trimmed == "[FormParams]"
+            || trimmed == "[MultipartFormData]"
+            || trimmed == "[Cookies]"
+            || trimmed == "[BasicAuth]"
+        {
             in_asserts_section = false;
             in_captures_section = false;
             in_body = false;
             *index += 1;
             continue;
         }
-        
+
         // Body markers
         if trimmed.starts_with("```") || trimmed.starts_with("{") || trimmed.starts_with("[") {
             in_body = true;
@@ -189,7 +194,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
+
         if in_body {
             body_lines.push(trimmed.to_string());
             if trimmed.starts_with("```") || trimmed == "}" || trimmed == "]" {
@@ -200,7 +205,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
+
         // Parse assertions
         if in_asserts_section {
             if let Some(assert) = parse_assert(trimmed, *index) {
@@ -209,7 +214,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
+
         // Parse captures
         if in_captures_section {
             if let Some(capture) = parse_capture(trimmed, *index) {
@@ -218,7 +223,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
             *index += 1;
             continue;
         }
-        
+
         // Parse headers (before response)
         if expected_status.is_none() && trimmed.contains(':') && !trimmed.starts_with('#') {
             if let Some((name, value)) = trimmed.split_once(':') {
@@ -228,7 +233,7 @@ fn parse_entry(lines: &[&str], index: &mut usize) -> Option<HurlEntry> {
                 });
             }
         }
-        
+
         *index += 1;
     }
 
@@ -254,12 +259,12 @@ fn parse_assert(line: &str, line_num: usize) -> Option<Assert> {
         return None;
     }
 
-    // Common patterns: 
+    // Common patterns:
     // status == 200
     // jsonpath "$.id" exists
     // jsonpath "$.name" == "value"
     // header "Content-Type" contains "json"
-    
+
     let parts: Vec<&str> = trimmed.splitn(2, char::is_whitespace).collect();
     if parts.is_empty() {
         return None;
@@ -269,10 +274,25 @@ fn parse_assert(line: &str, line_num: usize) -> Option<Assert> {
     let rest = parts.get(1).unwrap_or(&"").to_string();
 
     // Try to extract predicate and expected value
-    let predicates = ["==", "!=", ">=", "<=", ">", "<", "contains", "startsWith", 
-                      "endsWith", "matches", "exists", "isNumber", "isString", 
-                      "isBoolean", "isCollection", "count"];
-    
+    let predicates = [
+        "==",
+        "!=",
+        ">=",
+        "<=",
+        ">",
+        "<",
+        "contains",
+        "startsWith",
+        "endsWith",
+        "matches",
+        "exists",
+        "isNumber",
+        "isString",
+        "isBoolean",
+        "isCollection",
+        "count",
+    ];
+
     let mut query = rest.clone();
     let mut predicate = String::new();
     let mut expected = None;
@@ -315,7 +335,7 @@ fn parse_capture(line: &str, line_num: usize) -> Option<Capture> {
 
     let name = parts[0].trim().to_string();
     let rest = parts[1].trim();
-    
+
     let query_parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
     let query_type = query_parts.first().unwrap_or(&"").to_string();
     let query = query_parts.get(1).unwrap_or(&"").to_string();

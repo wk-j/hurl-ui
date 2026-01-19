@@ -10,8 +10,8 @@ use ratatui::{
     Frame,
 };
 
+use super::theme::{BoxChars, HackerTheme};
 use crate::app::{ActivePanel, App, AppMode};
-use super::theme::{HackerTheme, BoxChars};
 
 /// Render the file browser panel
 pub fn render_file_browser(frame: &mut Frame, app: &App, area: Rect) {
@@ -20,9 +20,17 @@ pub fn render_file_browser(frame: &mut Frame, app: &App, area: Rect) {
 
     // Build title with filter indicator
     let title = if is_filtering {
-        format!(" {} Files [>{}|] ", BoxChars::TRIANGLE_RIGHT, app.filter_query)
+        format!(
+            " {} Files [>{}|] ",
+            BoxChars::TRIANGLE_RIGHT,
+            app.filter_query
+        )
     } else if !app.filter_query.is_empty() {
-        format!(" {} Files [>{}] ", BoxChars::TRIANGLE_RIGHT, app.filter_query)
+        format!(
+            " {} Files [>{}] ",
+            BoxChars::TRIANGLE_RIGHT,
+            app.filter_query
+        )
     } else {
         format!(" {} Files ", BoxChars::TRIANGLE_RIGHT)
     };
@@ -37,7 +45,11 @@ pub fn render_file_browser(frame: &mut Frame, app: &App, area: Rect) {
 
     let block = Block::default()
         .title(title)
-        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(HackerTheme::VOID_BLACK));

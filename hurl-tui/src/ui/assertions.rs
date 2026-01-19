@@ -10,8 +10,8 @@ use ratatui::{
     Frame,
 };
 
+use super::theme::{BoxChars, HackerTheme};
 use crate::app::{ActivePanel, App};
-use super::theme::{HackerTheme, BoxChars};
 
 /// Render the assertions panel
 pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
@@ -25,7 +25,11 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
 
     let block = Block::default()
         .title(format!(" {} Assertions ", BoxChars::CHECK))
-        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(HackerTheme::VOID_BLACK));
@@ -36,7 +40,7 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 format!("  {} No test results", BoxChars::DOT),
-                Style::default().fg(HackerTheme::TEXT_MUTED)
+                Style::default().fg(HackerTheme::TEXT_MUTED),
             )),
         ])
         .block(block);
@@ -150,7 +154,10 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
                         format!("  {} ", BoxChars::DOT),
                         Style::default().fg(HackerTheme::TEXT_MUTED),
                     ),
-                    Span::styled(assert.text.clone(), Style::default().fg(HackerTheme::TEXT_SECONDARY)),
+                    Span::styled(
+                        assert.text.clone(),
+                        Style::default().fg(HackerTheme::TEXT_SECONDARY),
+                    ),
                 ]));
             }
 
@@ -174,9 +181,7 @@ pub fn render_assertions(frame: &mut Frame, app: &App, area: Rect) {
         )));
     }
 
-    let paragraph = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: true });
+    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
 
     frame.render_widget(paragraph, area);
 }

@@ -10,8 +10,8 @@ use ratatui::{
     Frame,
 };
 
+use super::theme::{BoxChars, HackerTheme};
 use crate::app::{ActivePanel, App, AppMode, VimMode};
-use super::theme::{HackerTheme, BoxChars};
 
 /// Render the editor panel
 pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
@@ -53,7 +53,11 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
 
     let block = Block::default()
         .title(title)
-        .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(HackerTheme::VOID_BLACK));
@@ -63,16 +67,16 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 format!("  {} No file loaded", BoxChars::DOT),
-                Style::default().fg(HackerTheme::TEXT_MUTED)
+                Style::default().fg(HackerTheme::TEXT_MUTED),
             )),
             Line::from(""),
             Line::from(Span::styled(
                 format!("  {} Select a .hurl file to begin", BoxChars::ARROW_RIGHT),
-                Style::default().fg(HackerTheme::TEXT_SECONDARY)
+                Style::default().fg(HackerTheme::TEXT_SECONDARY),
             )),
             Line::from(Span::styled(
                 format!("  {} Press [Enter] to open", BoxChars::ARROW_RIGHT),
-                Style::default().fg(HackerTheme::TEXT_SECONDARY)
+                Style::default().fg(HackerTheme::TEXT_SECONDARY),
             )),
         ])
         .block(block);
@@ -112,7 +116,7 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
                 };
 
                 spans.extend(highlight_hurl_spans(before));
-                
+
                 // Different cursor styles for vim modes
                 let cursor_style = match app.vim_mode {
                     VimMode::Normal => {
@@ -130,7 +134,7 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
                             .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
                     }
                 };
-                
+
                 spans.push(Span::styled(cursor_char.to_string(), cursor_style));
                 spans.extend(highlight_hurl_spans(after));
             } else {
@@ -160,7 +164,10 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
 
     // Comments
     if trimmed.starts_with('#') {
-        return vec![Span::styled(text, Style::default().fg(HackerTheme::TEXT_COMMENT))];
+        return vec![Span::styled(
+            text,
+            Style::default().fg(HackerTheme::TEXT_COMMENT),
+        )];
     }
 
     // HTTP methods
@@ -176,7 +183,10 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
                         .fg(HackerTheme::SYNTAX_METHOD)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(rest.to_string(), Style::default().fg(HackerTheme::SYNTAX_URL)),
+                Span::styled(
+                    rest.to_string(),
+                    Style::default().fg(HackerTheme::SYNTAX_URL),
+                ),
             ];
         }
     }
@@ -206,15 +216,29 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
         if let Some(colon_pos) = trimmed.find(':') {
             let (name, rest) = trimmed.split_at(colon_pos);
             return vec![
-                Span::styled(name.to_string(), Style::default().fg(HackerTheme::SYNTAX_HEADER)),
-                Span::styled(rest.to_string(), Style::default().fg(HackerTheme::SYNTAX_VALUE)),
+                Span::styled(
+                    name.to_string(),
+                    Style::default().fg(HackerTheme::SYNTAX_HEADER),
+                ),
+                Span::styled(
+                    rest.to_string(),
+                    Style::default().fg(HackerTheme::SYNTAX_VALUE),
+                ),
             ];
         }
     }
 
     // Assertions with predicates
     let assertion_keywords = [
-        "jsonpath", "xpath", "header", "status", "body", "bytes", "sha256", "md5", "duration",
+        "jsonpath",
+        "xpath",
+        "header",
+        "status",
+        "body",
+        "bytes",
+        "sha256",
+        "md5",
+        "duration",
         "certificate",
     ];
     for keyword in assertion_keywords {
@@ -236,9 +260,15 @@ fn highlight_hurl_spans(text: &str) -> Vec<Span<'static>> {
 
     // JSON content
     if trimmed.starts_with('{') || trimmed.starts_with('[') || trimmed.starts_with('"') {
-        return vec![Span::styled(text, Style::default().fg(HackerTheme::SYNTAX_DATA))];
+        return vec![Span::styled(
+            text,
+            Style::default().fg(HackerTheme::SYNTAX_DATA),
+        )];
     }
 
     // Default
-    vec![Span::styled(text, Style::default().fg(HackerTheme::TEXT_PRIMARY))]
+    vec![Span::styled(
+        text,
+        Style::default().fg(HackerTheme::TEXT_PRIMARY),
+    )]
 }

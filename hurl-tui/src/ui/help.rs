@@ -9,9 +9,9 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
 use super::layout::centered_rect;
-use super::theme::{HackerTheme, BoxChars};
+use super::theme::{BoxChars, HackerTheme};
+use crate::app::App;
 
 /// Render the help overlay
 pub fn render_help(frame: &mut Frame, _app: &App) {
@@ -22,14 +22,22 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
 
     let block = Block::default()
         .title(format!(" {} SYSTEM MANUAL ", BoxChars::TERMINAL_PROMPT))
-        .title_style(Style::default().fg(HackerTheme::MATRIX_GREEN).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(HackerTheme::MATRIX_GREEN)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(HackerTheme::MATRIX_GREEN))
         .style(Style::default().bg(HackerTheme::VOID_BLACK));
 
     let help_text = vec![
         Line::from(Span::styled(
-            format!("{} HURL-TUI :: COMMAND REFERENCE {}", BoxChars::GLITCH_2, BoxChars::GLITCH_2),
+            format!(
+                "{} HURL-TUI :: COMMAND REFERENCE {}",
+                BoxChars::GLITCH_2,
+                BoxChars::GLITCH_2
+            ),
             Style::default()
                 .fg(HackerTheme::MATRIX_GREEN_BRIGHT)
                 .add_modifier(Modifier::BOLD),
@@ -111,7 +119,11 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
         help_line("^c", "Force quit"),
         Line::from(""),
         Line::from(Span::styled(
-            format!("{} Press [q] or [?] to close {}", BoxChars::DOT, BoxChars::DOT),
+            format!(
+                "{} Press [q] or [?] to close {}",
+                BoxChars::DOT,
+                BoxChars::DOT
+            ),
             Style::default().fg(HackerTheme::TEXT_MUTED),
         )),
     ];

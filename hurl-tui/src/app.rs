@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::config::Config;
+use crate::effects::{presets, EffectId, EffectManager};
 use crate::parser::HurlFile;
 use crate::runner::{ExecutionResult, Runner};
 
@@ -84,7 +85,7 @@ struct PersistedState {
 }
 
 /// Active panel in the UI
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub enum ActivePanel {
     #[default]
     FileBrowser,
@@ -110,8 +111,8 @@ pub enum AppMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VimMode {
     #[default]
-    Normal,   // Navigation and commands (hjkl, etc.)
-    Insert,   // Text input mode
+    Normal, // Navigation and commands (hjkl, etc.)
+    Insert, // Text input mode
 }
 
 /// File tree entry
@@ -280,6 +281,15 @@ pub struct App {
     /// The file path being renamed.
     /// Stores the original path of the file when user initiates rename with 'n'.
     rename_target: Option<PathBuf>,
+
+    /// Effect manager for animations
+    pub effect_manager: EffectManager,
+
+    /// Previous active panel (for detecting panel changes)
+    previous_panel: ActivePanel,
+
+    /// Previous help state (for detecting help toggle)
+    previous_show_help: bool,
 }
 
 impl App {
@@ -320,6 +330,9 @@ impl App {
             clipboard_file: None,
             rename_input: String::new(),
             rename_target: None,
+            effect_manager: EffectManager::new(),
+            previous_panel: ActivePanel::FileBrowser,
+            previous_show_help: false,
         };
 
         // Load file tree
@@ -350,11 +363,14 @@ impl App {
     /// Save the current state (last opened file and execution states)
     fn save_state(&self) {
         let state = PersistedState {
-            last_opened_file: self.current_file_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+            last_opened_file: self
+                .current_file_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
             file_tree_index: self.file_tree_index,
             file_execution_states: self.file_execution_states.clone(),
         };
-        
+
         if let Ok(content) = serde_json::to_string_pretty(&state) {
             let _ = std::fs::write(self.get_state_file_path(), content);
         }
@@ -363,27 +379,30 @@ impl App {
     /// Restore the last opened file and execution states from persisted state
     fn restore_last_opened_file(&mut self) {
         let state_path = self.get_state_file_path();
-        
+
         if let Ok(content) = std::fs::read_to_string(&state_path) {
             if let Ok(state) = serde_json::from_str::<PersistedState>(&content) {
                 // Restore file execution states
                 self.file_execution_states = state.file_execution_states;
-                
+
                 // Restore last opened file
                 if let Some(file_path) = state.last_opened_file {
                     let path = PathBuf::from(&file_path);
                     if path.exists() {
                         let _ = self.preview_file(&path);
-                        
+
                         // Try to restore file tree index
                         let max = self.get_visible_file_count().saturating_sub(1);
                         self.file_tree_index = state.file_tree_index.min(max);
-                        
+
                         self.set_status(
-                            &format!("Restored: {}", path.file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default()),
-                            StatusLevel::Info
+                            &format!(
+                                "Restored: {}",
+                                path.file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_default()
+                            ),
+                            StatusLevel::Info,
                         );
                     }
                 }
@@ -407,8 +426,8 @@ impl App {
         if self.is_running {
             self.spinner_frame = self.spinner_frame.wrapping_add(1);
         }
-        // Clear status message after some time (could track time)
-        // For now, status messages persist until next action
+
+        // Note: Effect timing is handled in the render loop via effect_manager.tick()
     }
 
     /// Handle key events
@@ -454,6 +473,9 @@ impl App {
             // Help
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
+                if self.show_help {
+                    self.trigger_help_overlay_effect();
+                }
             }
 
             // Panel navigation
@@ -786,7 +808,10 @@ impl App {
                     self.set_status("Filter cleared", StatusLevel::Info);
                 } else {
                     let count = self.get_visible_file_count();
-                    self.set_status(&format!("Filter: {} ({} files)", self.filter_query, count), StatusLevel::Info);
+                    self.set_status(
+                        &format!("Filter: {} ({} files)", self.filter_query, count),
+                        StatusLevel::Info,
+                    );
                 }
             }
             KeyCode::Backspace => {
@@ -852,6 +877,7 @@ impl App {
 
     /// Navigate to next panel
     fn next_panel(&mut self) {
+        let old_panel = self.active_panel;
         self.active_panel = match self.active_panel {
             ActivePanel::FileBrowser => ActivePanel::Editor,
             ActivePanel::Editor => ActivePanel::Response,
@@ -859,10 +885,14 @@ impl App {
             ActivePanel::Assertions => ActivePanel::Variables,
             ActivePanel::Variables => ActivePanel::FileBrowser,
         };
+        if old_panel != self.active_panel {
+            self.trigger_panel_focus_effect();
+        }
     }
 
     /// Navigate to previous panel
     fn previous_panel(&mut self) {
+        let old_panel = self.active_panel;
         self.active_panel = match self.active_panel {
             ActivePanel::FileBrowser => ActivePanel::Variables,
             ActivePanel::Editor => ActivePanel::FileBrowser,
@@ -870,6 +900,55 @@ impl App {
             ActivePanel::Assertions => ActivePanel::Response,
             ActivePanel::Variables => ActivePanel::Assertions,
         };
+        if old_panel != self.active_panel {
+            self.trigger_panel_focus_effect();
+        }
+    }
+
+    /// Trigger panel focus effect - stored area will be updated during render
+    fn trigger_panel_focus_effect(&mut self) {
+        // The effect area will be set during render based on current layout
+        // For now we use a placeholder area - the UI module will update it
+        let effect = presets::panel_focus();
+        self.effect_manager.add_effect(
+            EffectId::PanelFocus(self.active_panel),
+            effect,
+            ratatui::layout::Rect::default(), // Will be updated during render
+        );
+    }
+
+    /// Trigger execution start effect (pulse on response panel)
+    fn trigger_execution_start_effect(&mut self) {
+        let effect = presets::execution_pulse();
+        self.effect_manager.add_effect(
+            EffectId::ExecutionStart,
+            effect,
+            ratatui::layout::Rect::default(), // Will be set to response panel during render
+        );
+    }
+
+    /// Trigger execution complete effect (success or error flash)
+    fn trigger_execution_complete_effect(&mut self, success: bool) {
+        let effect = if success {
+            presets::success_flash()
+        } else {
+            presets::error_flash()
+        };
+        self.effect_manager.add_effect(
+            EffectId::ExecutionComplete,
+            effect,
+            ratatui::layout::Rect::default(), // Will be set to response panel during render
+        );
+    }
+
+    /// Trigger help overlay animation
+    fn trigger_help_overlay_effect(&mut self) {
+        let effect = presets::dissolve_in();
+        self.effect_manager.add_effect(
+            EffectId::HelpOverlay,
+            effect,
+            ratatui::layout::Rect::default(), // Will be set to help area during render
+        );
     }
 
     /// Navigate down in current panel
@@ -989,7 +1068,8 @@ impl App {
                 entry.is_expanded = !entry.is_expanded;
                 if entry.is_expanded && entry.children.is_empty() {
                     // Load children
-                    if let Ok(children) = Self::load_directory_children(&entry.path, entry.depth + 1)
+                    if let Ok(children) =
+                        Self::load_directory_children(&entry.path, entry.depth + 1)
                     {
                         entry.children = children;
                     }
@@ -1073,16 +1153,18 @@ impl App {
             if entry.is_dir {
                 // Load children if not already loaded
                 if entry.children.is_empty() {
-                    if let Ok(children) = App::load_directory_children(&entry.path, entry.depth + 1) {
+                    if let Ok(children) = App::load_directory_children(&entry.path, entry.depth + 1)
+                    {
                         entry.children = children;
                     }
                 }
-                
+
                 // Check if this directory or its children contain .hurl files
-                let has_hurl = entry.children.iter().any(|c| {
-                    !c.is_dir || Self::dir_contains_hurl(&c.path)
-                });
-                
+                let has_hurl = entry
+                    .children
+                    .iter()
+                    .any(|c| !c.is_dir || Self::dir_contains_hurl(&c.path));
+
                 if has_hurl {
                     entry.is_expanded = true;
                     // Recursively expand children
@@ -1104,7 +1186,9 @@ impl App {
                 }
                 // Skip known unnecessary directories (case-insensitive for cross-platform)
                 let name_lower = name.to_lowercase();
-                IGNORED_DIRECTORIES.iter().any(|&ignored| ignored.to_lowercase() == name_lower)
+                IGNORED_DIRECTORIES
+                    .iter()
+                    .any(|&ignored| ignored.to_lowercase() == name_lower)
             })
             .unwrap_or(false)
     }
@@ -1185,25 +1269,29 @@ impl App {
         self.editor_content = content.lines().map(String::from).collect();
         self.editor_cursor = (0, 0);
         self.editor_scroll = 0;
-        
+
         // Restore execution state for this file if available
         let relative_path = self.get_relative_path(path);
         self.execution_result = self.file_execution_states.get(&relative_path).cloned();
-        
+
         self.response_scroll = 0;
         self.assertions_scroll = 0;
 
         if switch_panel {
             self.active_panel = ActivePanel::Editor;
         }
-        
-        let file_name = path.file_name()
+
+        let file_name = path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path.display().to_string());
-        
+
         // Show status with execution state info
         if self.execution_result.is_some() {
-            self.set_status(&format!("Preview: {} (with cached result)", file_name), StatusLevel::Info);
+            self.set_status(
+                &format!("Preview: {} (with cached result)", file_name),
+                StatusLevel::Info,
+            );
         } else {
             self.set_status(&format!("Preview: {}", file_name), StatusLevel::Info);
         }
@@ -1250,6 +1338,7 @@ impl App {
 
         self.is_running = true;
         self.set_status("Running request...", StatusLevel::Info);
+        self.trigger_execution_start_effect();
 
         // Build variables map
         let variables: HashMap<String, String> = self
@@ -1285,7 +1374,8 @@ impl App {
 
                 // Store execution result in the per-file cache
                 let relative_path = self.get_relative_path(&path);
-                self.file_execution_states.insert(relative_path, exec_result.clone());
+                self.file_execution_states
+                    .insert(relative_path, exec_result.clone());
 
                 self.execution_result = Some(exec_result);
                 self.response_scroll = 0;
@@ -1299,8 +1389,10 @@ impl App {
                         &format!("Request completed in {}ms", duration.as_millis()),
                         StatusLevel::Success,
                     );
+                    self.trigger_execution_complete_effect(true);
                 } else {
                     self.set_status("Request completed with failures", StatusLevel::Warning);
+                    self.trigger_execution_complete_effect(false);
                 }
             }
             Err(e) => {
@@ -1524,7 +1616,10 @@ impl App {
 
         // Check if there's a file in the clipboard
         let Some(source_path) = self.clipboard_file.clone() else {
-            self.set_status("No file in clipboard. Use 'p' to copy first.", StatusLevel::Warning);
+            self.set_status(
+                "No file in clipboard. Use 'p' to copy first.",
+                StatusLevel::Warning,
+            );
             return;
         };
 
@@ -1542,7 +1637,11 @@ impl App {
                 entry.path.clone()
             } else {
                 // Selected item is a file - paste into its parent directory
-                entry.path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| self.working_dir.clone())
+                entry
+                    .path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| self.working_dir.clone())
             }
         } else {
             // No selection - paste into the working directory
@@ -1561,10 +1660,12 @@ impl App {
 
         // Generate unique filename if target already exists
         while target_path.exists() {
-            let stem = source_path.file_stem()
+            let stem = source_path
+                .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
-            let ext = source_path.extension()
+            let ext = source_path
+                .extension()
                 .map(|e| format!(".{}", e.to_string_lossy()))
                 .unwrap_or_default();
             let new_name = format!("{}_copy{}{}", stem, counter, ext);
@@ -1575,14 +1676,18 @@ impl App {
         // Perform the file copy operation
         match std::fs::copy(&source_path, &target_path) {
             Ok(_) => {
-                let target_name = target_path.file_name()
+                let target_name = target_path
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 self.set_status(&format!("Pasted: {}", target_name), StatusLevel::Success);
-                
+
                 // Refresh file tree to show the newly pasted file
                 if let Err(e) = self.refresh_file_tree() {
-                    self.set_status(&format!("Pasted but refresh failed: {}", e), StatusLevel::Warning);
+                    self.set_status(
+                        &format!("Pasted but refresh failed: {}", e),
+                        StatusLevel::Warning,
+                    );
                 }
             }
             Err(e) => {
@@ -1611,7 +1716,9 @@ impl App {
         }
 
         // Get the selected entry info (clone to avoid borrow issues)
-        let entry_info = self.get_selected_file_entry().map(|e| (e.path.clone(), e.name.clone(), e.is_dir));
+        let entry_info = self
+            .get_selected_file_entry()
+            .map(|e| (e.path.clone(), e.name.clone(), e.is_dir));
 
         if let Some((path, name, is_dir)) = entry_info {
             // Directories cannot be renamed (for now)
@@ -1624,7 +1731,10 @@ impl App {
             self.rename_target = Some(path);
             self.rename_input = name;
             self.mode = AppMode::Rename;
-            self.set_status("Enter new name (Enter to confirm, Esc to cancel)", StatusLevel::Info);
+            self.set_status(
+                "Enter new name (Enter to confirm, Esc to cancel)",
+                StatusLevel::Info,
+            );
         } else {
             self.set_status("No file selected", StatusLevel::Warning);
         }
@@ -1656,13 +1766,17 @@ impl App {
 
         // Check for invalid characters (additional safety)
         if new_name.contains('/') || new_name.contains('\\') {
-            self.set_status("Filename cannot contain path separators", StatusLevel::Error);
+            self.set_status(
+                "Filename cannot contain path separators",
+                StatusLevel::Error,
+            );
             return;
         }
 
         // Ensure .hurl extension is preserved for hurl files
-        let new_name = if source_path.extension().map_or(false, |e| e == "hurl") 
-            && !new_name.ends_with(".hurl") {
+        let new_name = if source_path.extension().map_or(false, |e| e == "hurl")
+            && !new_name.ends_with(".hurl")
+        {
             format!("{}.hurl", new_name)
         } else {
             new_name
@@ -1677,7 +1791,10 @@ impl App {
 
         // Check if target already exists
         if target_path.exists() && target_path != source_path {
-            self.set_status(&format!("File '{}' already exists", new_name), StatusLevel::Error);
+            self.set_status(
+                &format!("File '{}' already exists", new_name),
+                StatusLevel::Error,
+            );
             return;
         }
 
@@ -1690,10 +1807,14 @@ impl App {
         // Perform the rename
         match std::fs::rename(&source_path, &target_path) {
             Ok(_) => {
-                let old_name = source_path.file_name()
+                let old_name = source_path
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
-                self.set_status(&format!("Renamed: {} -> {}", old_name, new_name), StatusLevel::Success);
+                self.set_status(
+                    &format!("Renamed: {} -> {}", old_name, new_name),
+                    StatusLevel::Success,
+                );
 
                 // Update current_file_path if the renamed file was open
                 if self.current_file_path.as_ref() == Some(&source_path) {
@@ -1707,7 +1828,10 @@ impl App {
 
                 // Refresh file tree to show the renamed file
                 if let Err(e) = self.refresh_file_tree() {
-                    self.set_status(&format!("Renamed but refresh failed: {}", e), StatusLevel::Warning);
+                    self.set_status(
+                        &format!("Renamed but refresh failed: {}", e),
+                        StatusLevel::Warning,
+                    );
                 }
             }
             Err(e) => {
@@ -1935,7 +2059,7 @@ impl App {
     /// Output AI context to stdout and quit (for Helix/pipe integration)
     fn output_ai_context_and_quit(&mut self) {
         let context = self.build_ai_context();
-        
+
         if context.is_empty() {
             self.set_status("No context to output", StatusLevel::Warning);
             return;
@@ -2307,7 +2431,10 @@ impl App {
         self.editor_cursor.0 = self.editor_cursor.0.saturating_sub(page_size);
         self.editor_scroll = self.editor_scroll.saturating_sub(page_size);
         // Adjust column to line length
-        let line_len = self.editor_content.get(self.editor_cursor.0).map_or(0, |l| l.len());
+        let line_len = self
+            .editor_content
+            .get(self.editor_cursor.0)
+            .map_or(0, |l| l.len());
         self.editor_cursor.1 = self.editor_cursor.1.min(line_len);
     }
 
@@ -2317,7 +2444,10 @@ impl App {
         self.editor_cursor.0 = (self.editor_cursor.0 + page_size).min(max_line);
         self.editor_scroll = (self.editor_scroll + page_size).min(max_line);
         // Adjust column to line length
-        let line_len = self.editor_content.get(self.editor_cursor.0).map_or(0, |l| l.len());
+        let line_len = self
+            .editor_content
+            .get(self.editor_cursor.0)
+            .map_or(0, |l| l.len());
         self.editor_cursor.1 = self.editor_cursor.1.min(line_len);
     }
 
@@ -2331,13 +2461,14 @@ impl App {
             let filter_lower = filter.to_lowercase();
             for entry in entries {
                 // Check if this entry matches the filter
-                let matches_filter = filter.is_empty()
-                    || entry.name.to_lowercase().contains(&filter_lower);
-                
+                let matches_filter =
+                    filter.is_empty() || entry.name.to_lowercase().contains(&filter_lower);
+
                 // For directories, also check if any children match
-                let has_matching_children = entry.is_dir && entry.is_expanded
+                let has_matching_children = entry.is_dir
+                    && entry.is_expanded
                     && App::has_matching_descendants(&entry.children, &filter_lower);
-                
+
                 if matches_filter || has_matching_children || entry.is_dir {
                     // Include directories to maintain tree structure, but only if
                     // they match or have matching descendants (when filter is active)
@@ -2345,7 +2476,7 @@ impl App {
                         result.push(entry);
                     }
                 }
-                
+
                 if entry.is_expanded {
                     collect_visible(&entry.children, result, filter);
                 }
