@@ -4,7 +4,6 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::process::Command;
@@ -42,7 +41,7 @@ impl Runner {
     pub async fn run(
         &self,
         file_path: &PathBuf,
-        variables: &HashMap<String, String>,
+        variables_file: Option<&PathBuf>,
     ) -> Result<ExecutionResult> {
         let hurl_cmd = self
             .hurl_path
@@ -65,10 +64,10 @@ impl Runner {
         cmd.arg("--max-time");
         cmd.arg(self.timeout.to_string());
 
-        // Add variables
-        for (key, value) in variables {
-            cmd.arg("--variable");
-            cmd.arg(format!("{}={}", key, value));
+        // Add variables file if provided
+        if let Some(vars_file) = variables_file {
+            cmd.arg("--variables-file");
+            cmd.arg(vars_file);
         }
 
         // Configure stdio

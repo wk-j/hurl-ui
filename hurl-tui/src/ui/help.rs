@@ -80,7 +80,7 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
         help_line("v", "Variables panel"),
         help_line("E", "Cycle environment"),
         help_line("y / Y", "Copy path / response"),
-        help_line("c", "Copy AI context"),
+        help_line("c / C", "Copy AI context / command"),
         help_line("o", "Output context & quit"),
         Line::from(""),
         Line::from(Span::styled(

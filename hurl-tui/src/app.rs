@@ -82,6 +82,9 @@ struct PersistedState {
     /// Execution results per file (keyed by relative path)
     #[serde(default)]
     file_execution_states: HashMap<String, ExecutionResult>,
+    /// Last selected environment
+    #[serde(default)]
+    selected_environment: Option<String>,
 }
 
 /// Active panel in the UI
@@ -235,6 +238,9 @@ pub struct App {
     /// Available environments
     pub environments: Vec<String>,
 
+    /// Current environment file path (for --variables-file)
+    pub current_env_file: Option<PathBuf>,
+
     /// Request history
     pub history: Vec<HistoryEntry>,
 
@@ -314,8 +320,9 @@ impl App {
             is_running: false,
             spinner_frame: 0,
             variables: Vec::new(),
-            current_environment: String::from("default"),
-            environments: vec![String::from("default")],
+            current_environment: String::new(),
+            environments: Vec::new(),
+            current_env_file: None,
             history: Vec::new(),
             history_index: 0,
             search_query: String::new(),
@@ -369,6 +376,11 @@ impl App {
                 .map(|p| p.to_string_lossy().to_string()),
             file_tree_index: self.file_tree_index,
             file_execution_states: self.file_execution_states.clone(),
+            selected_environment: if self.current_environment.is_empty() {
+                None
+            } else {
+                Some(self.current_environment.clone())
+            },
         };
 
         if let Ok(content) = serde_json::to_string_pretty(&state) {
@@ -384,6 +396,14 @@ impl App {
             if let Ok(state) = serde_json::from_str::<PersistedState>(&content) {
                 // Restore file execution states
                 self.file_execution_states = state.file_execution_states;
+
+                // Restore selected environment
+                if let Some(env) = state.selected_environment {
+                    if self.environments.contains(&env) {
+                        self.current_environment = env;
+                        let _ = self.load_current_environment_variables();
+                    }
+                }
 
                 // Restore last opened file
                 if let Some(file_path) = state.last_opened_file {
@@ -609,6 +629,11 @@ impl App {
             // Copy AI context (c = copy context for AI)
             KeyCode::Char('c') => {
                 self.copy_ai_context();
+            }
+
+            // Copy hurl command to clipboard (C = copy command)
+            KeyCode::Char('C') => {
+                self.copy_hurl_command();
             }
 
             // Output AI context to stdout and quit (o = output for pipe/Helix)
@@ -1227,13 +1252,13 @@ impl App {
                     continue;
                 }
 
-                // Only include .hurl files and directories that contain .hurl files
+                // Only include .hurl/.env files and directories that contain .hurl files
                 if path.is_dir() {
                     // Only include directories that contain .hurl files (recursively)
                     if Self::dir_contains_hurl(&path) {
                         entries.push(FileEntry::new(path, depth));
                     }
-                } else if path.extension().map_or(false, |e| e == "hurl") {
+                } else if path.extension().map_or(false, |e| e == "hurl" || e == "env") {
                     entries.push(FileEntry::new(path, depth));
                 }
             }
@@ -1262,17 +1287,25 @@ impl App {
     /// Internal file opening logic
     fn open_file_internal(&mut self, path: &PathBuf, switch_panel: bool) -> Result<()> {
         let content = std::fs::read_to_string(path)?;
-        let hurl_file = crate::parser::parse_hurl_file(&content)?;
+        let is_hurl_file = path.extension().map_or(false, |e| e == "hurl");
 
-        self.current_file = Some(hurl_file);
+        if is_hurl_file {
+            let hurl_file = crate::parser::parse_hurl_file(&content)?;
+            self.current_file = Some(hurl_file);
+
+            // Restore execution state for this file if available
+            let relative_path = self.get_relative_path(path);
+            self.execution_result = self.file_execution_states.get(&relative_path).cloned();
+        } else {
+            // For non-hurl files (like .env), just show content without parsing
+            self.current_file = None;
+            self.execution_result = None;
+        }
+
         self.current_file_path = Some(path.clone());
         self.editor_content = content.lines().map(String::from).collect();
         self.editor_cursor = (0, 0);
         self.editor_scroll = 0;
-
-        // Restore execution state for this file if available
-        let relative_path = self.get_relative_path(path);
-        self.execution_result = self.file_execution_states.get(&relative_path).cloned();
 
         self.response_scroll = 0;
         self.assertions_scroll = 0;
@@ -1305,7 +1338,7 @@ impl App {
     /// Auto-preview the currently selected file in the file browser
     fn auto_preview_selected_file(&mut self) {
         if let Some(entry) = self.get_selected_file_entry() {
-            if !entry.is_dir && entry.path.extension().map_or(false, |e| e == "hurl") {
+            if !entry.is_dir && entry.path.extension().map_or(false, |e| e == "hurl" || e == "env") {
                 let path = entry.path.clone();
                 let _ = self.preview_file(&path);
             }
@@ -1340,16 +1373,9 @@ impl App {
         self.set_status("Running request...", StatusLevel::Info);
         self.trigger_execution_start_effect();
 
-        // Build variables map
-        let variables: HashMap<String, String> = self
-            .variables
-            .iter()
-            .map(|v| (v.name.clone(), v.value.clone()))
-            .collect();
-
-        // Run the request
+        // Run the request with variables file
         let start = std::time::Instant::now();
-        let result = self.runner.run(&path, &variables).await;
+        let result = self.runner.run(&path, self.current_env_file.as_ref()).await;
         let duration = start.elapsed();
 
         self.is_running = false;
@@ -1403,30 +1429,64 @@ impl App {
         Ok(())
     }
 
-    /// Load environments from config
-    fn load_environments(&mut self) -> Result<()> {
-        // Look for environment files in the working directory
-        let env_dir = self.working_dir.join("environments");
-        if env_dir.exists() {
-            if let Ok(read_dir) = std::fs::read_dir(&env_dir) {
-                for entry in read_dir.flatten() {
-                    let path = entry.path();
-                    if path
-                        .extension()
-                        .map_or(false, |e| e == "env" || e == "toml" || e == "json")
-                    {
-                        if let Some(name) = path.file_stem() {
-                            let name = name.to_string_lossy().to_string();
-                            if !self.environments.contains(&name) {
-                                self.environments.push(name);
+    /// Recursively find all .env files in a directory
+    fn find_env_files(dir: &PathBuf) -> Vec<PathBuf> {
+        let mut env_files = Vec::new();
+
+        if let Ok(read_dir) = std::fs::read_dir(dir) {
+            for entry in read_dir.flatten() {
+                let path = entry.path();
+
+                // Skip hidden and ignored directories
+                if Self::should_skip_directory(&path) {
+                    continue;
+                }
+
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if ext == "env" {
+                            // Use absolute path
+                            if let Ok(abs_path) = path.canonicalize() {
+                                env_files.push(abs_path);
+                            } else {
+                                env_files.push(path);
                             }
                         }
                     }
+                } else if path.is_dir() {
+                    // Recursively scan subdirectories
+                    env_files.extend(Self::find_env_files(&path));
                 }
             }
         }
 
-        self.load_current_environment_variables()?;
+        env_files
+    }
+
+    /// Load environments by scanning for .env files recursively in the working directory
+    fn load_environments(&mut self) -> Result<()> {
+        self.environments.clear();
+
+        // Find all .env files recursively
+        let env_files = Self::find_env_files(&self.working_dir);
+
+        for path in env_files {
+            if let Some(name) = path.file_stem() {
+                let name = name.to_string_lossy().to_string();
+                if !self.environments.contains(&name) {
+                    self.environments.push(name);
+                }
+            }
+        }
+
+        // Sort environments alphabetically
+        self.environments.sort();
+
+        // Set current environment to first one if available
+        if !self.environments.is_empty() {
+            self.current_environment = self.environments[0].clone();
+            self.load_current_environment_variables()?;
+        }
 
         Ok(())
     }
@@ -1434,29 +1494,42 @@ impl App {
     /// Load variables for the current environment
     fn load_current_environment_variables(&mut self) -> Result<()> {
         self.variables.clear();
+        self.current_env_file = None;
 
-        // Try to load from environment file
-        let env_file = self
-            .working_dir
-            .join("environments")
-            .join(format!("{}.env", self.current_environment));
+        if self.current_environment.is_empty() {
+            return Ok(());
+        }
 
-        if env_file.exists() {
-            if let Ok(content) = std::fs::read_to_string(&env_file) {
-                for line in content.lines() {
-                    let line = line.trim();
-                    if line.is_empty() || line.starts_with('#') {
-                        continue;
-                    }
-                    if let Some((key, value)) = line.split_once('=') {
-                        self.variables.push(Variable {
-                            name: key.trim().to_string(),
-                            value: value.trim().to_string(),
-                            is_secret: key.to_lowercase().contains("secret")
-                                || key.to_lowercase().contains("password")
-                                || key.to_lowercase().contains("token"),
-                        });
-                    }
+        // Find the env file recursively
+        let env_files = Self::find_env_files(&self.working_dir);
+        let env_file = env_files.into_iter().find(|p| {
+            p.file_stem()
+                .map(|s| s.to_string_lossy() == self.current_environment)
+                .unwrap_or(false)
+        });
+
+        let Some(env_file) = env_file else {
+            return Ok(());
+        };
+
+        // Store the file path for --variables-file
+        self.current_env_file = Some(env_file.clone());
+
+        // Also parse variables for UI display
+        if let Ok(content) = std::fs::read_to_string(&env_file) {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some((key, value)) = line.split_once('=') {
+                    self.variables.push(Variable {
+                        name: key.trim().to_string(),
+                        value: value.trim().to_string(),
+                        is_secret: key.to_lowercase().contains("secret")
+                            || key.to_lowercase().contains("password")
+                            || key.to_lowercase().contains("token"),
+                    });
                 }
             }
         }
@@ -1466,6 +1539,11 @@ impl App {
 
     /// Cycle through environments
     fn cycle_environment(&mut self) {
+        if self.environments.is_empty() {
+            self.set_status("No .env files found", StatusLevel::Warning);
+            return;
+        }
+
         if let Some(idx) = self
             .environments
             .iter()
@@ -1478,6 +1556,8 @@ impl App {
                 &format!("Environment: {}", self.current_environment),
                 StatusLevel::Info,
             );
+            // Save state to persist selected environment
+            self.save_state();
         }
     }
 
@@ -1552,6 +1632,43 @@ impl App {
         let mut clipboard = Clipboard::new()?;
         clipboard.set_text(text)?;
         Ok(())
+    }
+
+    /// Copy the hurl command to clipboard
+    fn copy_hurl_command(&mut self) {
+        let Some(file_path) = &self.current_file_path else {
+            self.set_status("No file selected", StatusLevel::Warning);
+            return;
+        };
+
+        // Only for .hurl files
+        if !file_path.extension().map_or(false, |e| e == "hurl") {
+            self.set_status("Not a .hurl file", StatusLevel::Warning);
+            return;
+        }
+
+        // Build the command
+        let mut cmd_parts = vec!["hurl".to_string()];
+
+        // Add variables file if available
+        if let Some(env_file) = &self.current_env_file {
+            cmd_parts.push("--variables-file".to_string());
+            cmd_parts.push(env_file.to_string_lossy().to_string());
+        }
+
+        // Add the hurl file path
+        cmd_parts.push(file_path.to_string_lossy().to_string());
+
+        let command = cmd_parts.join(" ");
+
+        match self.copy_to_clipboard(&command) {
+            Ok(_) => {
+                self.set_status(&format!("Copied: {}", command), StatusLevel::Success);
+            }
+            Err(e) => {
+                self.set_status(&format!("Copy failed: {}", e), StatusLevel::Error);
+            }
+        }
     }
 
     /// Copy the selected file to the internal clipboard for paste operation.

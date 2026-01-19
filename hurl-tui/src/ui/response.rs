@@ -65,23 +65,70 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let Some(response) = &result.response else {
-        let error_msg = if result.success {
-            format!("{} Response data unavailable", BoxChars::DOT)
+        // No response - show error from stderr
+        let mut lines: Vec<Line> = Vec::new();
+
+        if result.success {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                format!("  {} Response data unavailable", BoxChars::DOT),
+                Style::default().fg(HackerTheme::TEXT_MUTED),
+            )));
         } else {
-            format!("{} REQUEST FAILED - Check stderr", BoxChars::CROSS)
-        };
-        let error = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled(
-                format!("  {}", error_msg),
-                Style::default().fg(if result.success {
-                    HackerTheme::TEXT_MUTED
-                } else {
-                    HackerTheme::NEON_RED
-                }),
-            )),
-        ])
-        .block(block);
+            // Show error header
+            lines.push(Line::from(Span::styled(
+                format!(" {} ERROR", BoxChars::CROSS),
+                Style::default()
+                    .fg(HackerTheme::NEON_RED)
+                    .add_modifier(Modifier::BOLD),
+            )));
+            lines.push(Line::from(""));
+
+            // Show stderr content (the actual error message)
+            if !result.stderr.is_empty() {
+                for line in result.stderr.lines() {
+                    let styled_line = if line.starts_with("error:") {
+                        Line::from(Span::styled(
+                            format!(" {}", line),
+                            Style::default()
+                                .fg(HackerTheme::NEON_RED)
+                                .add_modifier(Modifier::BOLD),
+                        ))
+                    } else if line.contains("-->") {
+                        Line::from(Span::styled(
+                            format!(" {}", line),
+                            Style::default().fg(HackerTheme::TEXT_COMMENT),
+                        ))
+                    } else if line.trim().starts_with('|') {
+                        Line::from(Span::styled(
+                            format!(" {}", line),
+                            Style::default().fg(HackerTheme::TEXT_PRIMARY),
+                        ))
+                    } else if line.contains("^^^") {
+                        Line::from(Span::styled(
+                            format!(" {}", line),
+                            Style::default().fg(HackerTheme::NEON_RED),
+                        ))
+                    } else {
+                        Line::from(Span::styled(
+                            format!(" {}", line),
+                            Style::default().fg(HackerTheme::TEXT_SECONDARY),
+                        ))
+                    };
+                    lines.push(styled_line);
+                }
+            } else {
+                lines.push(Line::from(Span::styled(
+                    "  Request failed (no error details)",
+                    Style::default().fg(HackerTheme::NEON_RED),
+                )));
+            }
+        }
+
+        let error = Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .scroll((app.response_scroll as u16, 0));
         frame.render_widget(error, area);
         return;
     };
