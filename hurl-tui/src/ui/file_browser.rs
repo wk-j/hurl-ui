@@ -73,7 +73,7 @@ pub fn render_file_browser(frame: &mut Frame, app: &App, area: Rect) {
             let dir_icon = if entry.is_dir {
                 format!("{} ", BoxChars::DIAMOND)
             } else {
-                "  ".to_string()
+                "".to_string()
             };
 
             let name = &entry.name;
