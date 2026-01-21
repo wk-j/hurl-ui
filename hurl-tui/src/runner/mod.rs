@@ -49,32 +49,21 @@ impl Runner {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "hurl".to_string());
 
+        // First run: with --very-verbose to get body and details
         let mut cmd = Command::new(&hurl_cmd);
-
-        // Add the file path
         cmd.arg(file_path);
-
-        // Add JSON output for structured parsing
-        cmd.arg("--json");
-
-        // Add verbose output for more details
-        cmd.arg("--verbose");
-
-        // Add timeout
+        cmd.arg("--very-verbose");
         cmd.arg("--max-time");
         cmd.arg(self.timeout.to_string());
 
-        // Add variables file if provided
         if let Some(vars_file) = variables_file {
             cmd.arg("--variables-file");
             cmd.arg(vars_file);
         }
 
-        // Configure stdio
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        // Execute
         let output = cmd
             .output()
             .await
@@ -84,8 +73,8 @@ impl Runner {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let success = output.status.success();
 
-        // Try to parse JSON output
-        let response = self.parse_response(&stdout, &stderr);
+        // Parse response from very-verbose output (includes body)
+        let response = self.parse_response_from_very_verbose(&stderr, &stdout);
         let asserts = self.parse_asserts(&stderr);
 
         Ok(ExecutionResult {
@@ -98,61 +87,43 @@ impl Runner {
         })
     }
 
-    /// Parse response from hurl output
-    fn parse_response(&self, stdout: &str, stderr: &str) -> Option<Response> {
-        // Try to parse JSON output first
-        if let Ok(json_output) = serde_json::from_str::<HurlJsonOutput>(stdout) {
-            if let Some(entry) = json_output.entries.first() {
-                if let Some(response) = &entry.response {
-                    return Some(Response {
-                        status_code: response.status,
-                        headers: response
-                            .headers
-                            .iter()
-                            .map(|h| (h.name.clone(), h.value.clone()))
-                            .collect(),
-                        body: entry
-                            .response
-                            .as_ref()
-                            .and_then(|r| r.body.clone())
-                            .unwrap_or_default(),
-                        duration_ms: entry.time_in_ms.unwrap_or(0),
-                    });
-                }
-            }
-        }
-
-        // Fallback: parse from stderr verbose output
-        self.parse_response_from_verbose(stderr)
-    }
-
-    /// Parse response from verbose stderr output
-    fn parse_response_from_verbose(&self, stderr: &str) -> Option<Response> {
+    /// Parse response from --very-verbose output
+    /// The body is output to stdout, metadata is in stderr
+    fn parse_response_from_very_verbose(&self, stderr: &str, stdout: &str) -> Option<Response> {
         let mut status_code = 0u16;
         let mut headers = Vec::new();
-        let mut body = String::new();
         let mut duration_ms = 0u64;
         let mut in_response_headers = false;
+        let mut body_lines: Vec<String> = Vec::new();
         let mut in_response_body = false;
 
         for line in stderr.lines() {
-            // Look for response status
+            // Look for response status line: "< HTTP/1.1 200 OK" or "< HTTP/2 200"
             if line.starts_with("< HTTP/") {
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 3 {
-                    if let Ok(status) = parts[2].parse::<u16>() {
+                if parts.len() >= 2 {
+                    // Status code is the second part after "< HTTP/x.x"
+                    if let Ok(status) = parts[1].parse::<u16>() {
                         status_code = status;
                         in_response_headers = true;
                         in_response_body = false;
+                    } else if parts.len() >= 3 {
+                        // Try third part (for "< HTTP/1.1 200 OK" format)
+                        if let Ok(status) = parts[2].parse::<u16>() {
+                            status_code = status;
+                            in_response_headers = true;
+                            in_response_body = false;
+                        }
                     }
                 }
                 continue;
             }
 
-            // Parse response headers
+            // Parse response headers (lines starting with "< ")
             if in_response_headers && line.starts_with("< ") {
                 let header_line = &line[2..];
-                if header_line.is_empty() {
+                if header_line.trim().is_empty() {
+                    // Empty line marks end of headers
                     in_response_headers = false;
                     in_response_body = true;
                     continue;
@@ -163,18 +134,48 @@ impl Runner {
                 continue;
             }
 
+            // Capture response body lines (lines starting with "* Response body:")
+            // or lines after we've seen the body marker
+            if line.starts_with("* Response body:") {
+                in_response_body = true;
+                // The body content follows on subsequent lines with "* " prefix
+                continue;
+            }
+
+            // Capture body lines (prefixed with "* " in very-verbose mode)
+            if in_response_body && line.starts_with("* ") {
+                let body_line = &line[2..];
+                // Stop if we hit another section marker
+                if body_line.starts_with("Executing entry")
+                    || body_line.starts_with("Cookie store:")
+                    || body_line.starts_with("Request:")
+                    || body_line.contains("Timings:")
+                {
+                    in_response_body = false;
+                    continue;
+                }
+                body_lines.push(body_line.to_string());
+                continue;
+            }
+
             // Look for timing information
-            if line.contains("Response time:") || line.contains("time=") {
-                // Try to extract duration
-                if let Some(ms_str) = line.split("ms").next() {
-                    if let Some(num_str) = ms_str.split_whitespace().last() {
-                        if let Ok(ms) = num_str.parse::<u64>() {
-                            duration_ms = ms;
-                        }
+            if line.contains("time_total:") {
+                // Format: "* time_total: 0.123456 s"
+                if let Some(time_part) = line.split("time_total:").nth(1) {
+                    let time_str = time_part.trim().trim_end_matches(" s").trim_end_matches('s');
+                    if let Ok(secs) = time_str.trim().parse::<f64>() {
+                        duration_ms = (secs * 1000.0) as u64;
                     }
                 }
             }
         }
+
+        // If we didn't capture body from stderr, use stdout (hurl outputs body to stdout)
+        let body = if body_lines.is_empty() {
+            stdout.to_string()
+        } else {
+            body_lines.join("\n")
+        };
 
         if status_code > 0 {
             Some(Response {

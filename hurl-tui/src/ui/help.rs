@@ -79,6 +79,7 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
         help_line("e", "Edit mode (vim)"),
         help_line("v", "Variables panel"),
         help_line("E", "Cycle environment"),
+        help_line("1/2/3", "Response: Body/Headers/Raw"),
         help_line("y / Y", "Copy path / response"),
         help_line("c / C", "Copy AI context / command"),
         help_line("o", "Output context & quit"),

@@ -11,6 +11,7 @@ use crate::config::Config;
 use crate::effects::{presets, EffectId, EffectManager};
 use crate::parser::HurlFile;
 use crate::runner::{ExecutionResult, Runner};
+use crate::ui::ResponseTab;
 
 /// Directories to skip when scanning for .hurl files
 /// These are common build output, dependency, and cache directories
@@ -296,6 +297,9 @@ pub struct App {
 
     /// Previous help state (for detecting help toggle)
     previous_show_help: bool,
+
+    /// Current response tab (Body, Headers, Raw)
+    pub response_tab: ResponseTab,
 }
 
 impl App {
@@ -340,6 +344,7 @@ impl App {
             effect_manager: EffectManager::new(),
             previous_panel: ActivePanel::FileBrowser,
             previous_show_help: false,
+            response_tab: ResponseTab::Body,
         };
 
         // Load file tree
@@ -654,6 +659,26 @@ impl App {
             // Rename file (n = name/rename file)
             KeyCode::Char('n') => {
                 self.start_rename();
+            }
+
+            // Response tab switching (when in Response panel)
+            KeyCode::Char('1') => {
+                if self.active_panel == ActivePanel::Response {
+                    self.response_tab = ResponseTab::Body;
+                    self.response_scroll = 0;
+                }
+            }
+            KeyCode::Char('2') => {
+                if self.active_panel == ActivePanel::Response {
+                    self.response_tab = ResponseTab::Headers;
+                    self.response_scroll = 0;
+                }
+            }
+            KeyCode::Char('3') => {
+                if self.active_panel == ActivePanel::Response {
+                    self.response_tab = ResponseTab::Raw;
+                    self.response_scroll = 0;
+                }
             }
 
             _ => {}

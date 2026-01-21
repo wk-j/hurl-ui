@@ -21,7 +21,7 @@ pub use editor::render_editor;
 pub use file_browser::render_file_browser;
 pub use help::render_help;
 pub use layout::{create_layout, AppLayout};
-pub use response::render_response;
+pub use response::{render_response, ResponseTab};
 pub use status_bar::render_status_bar;
 pub use variables::render_variables;
 
