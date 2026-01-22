@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use ratatui::widgets::ListState;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -86,6 +87,9 @@ struct PersistedState {
     /// Last selected environment
     #[serde(default)]
     selected_environment: Option<String>,
+    /// Expanded folder paths (relative to working directory)
+    #[serde(default)]
+    expanded_folders: Vec<String>,
 }
 
 /// Active panel in the UI
@@ -203,6 +207,9 @@ pub struct App {
     /// Index of selected file in the flattened tree
     pub file_tree_index: usize,
 
+    /// List state for file browser scrolling
+    pub file_tree_state: ListState,
+
     /// Currently open hurl file
     pub current_file: Option<HurlFile>,
 
@@ -314,6 +321,7 @@ impl App {
             vim_mode: VimMode::Normal,
             file_tree: Vec::new(),
             file_tree_index: 0,
+            file_tree_state: ListState::default().with_selected(Some(0)),
             current_file: None,
             current_file_path: None,
             editor_content: Vec::new(),
@@ -347,14 +355,11 @@ impl App {
             response_tab: ResponseTab::Body,
         };
 
-        // Load file tree
-        app.refresh_file_tree()?;
+        // Load file tree and restore state (including expanded folders)
+        app.load_file_tree_and_restore_state()?;
 
         // Load environments
         app.load_environments()?;
-
-        // Restore last opened file
-        app.restore_last_opened_file();
 
         Ok(app)
     }
@@ -372,6 +377,33 @@ impl App {
             .to_string()
     }
 
+    /// Collect all expanded folder paths from the file tree
+    fn collect_expanded_folders(&self) -> Vec<String> {
+        let mut expanded = Vec::new();
+        Self::collect_expanded_recursive(&self.file_tree, &self.working_dir, &mut expanded);
+        expanded
+    }
+
+    /// Recursively collect expanded folder paths
+    fn collect_expanded_recursive(
+        entries: &[FileEntry],
+        working_dir: &PathBuf,
+        expanded: &mut Vec<String>,
+    ) {
+        for entry in entries {
+            if entry.is_dir && entry.is_expanded {
+                let relative = entry
+                    .path
+                    .strip_prefix(working_dir)
+                    .unwrap_or(&entry.path)
+                    .to_string_lossy()
+                    .to_string();
+                expanded.push(relative);
+                Self::collect_expanded_recursive(&entry.children, working_dir, expanded);
+            }
+        }
+    }
+
     /// Save the current state (last opened file and execution states)
     fn save_state(&self) {
         let state = PersistedState {
@@ -386,6 +418,7 @@ impl App {
             } else {
                 Some(self.current_environment.clone())
             },
+            expanded_folders: self.collect_expanded_folders(),
         };
 
         if let Ok(content) = serde_json::to_string_pretty(&state) {
@@ -393,43 +426,102 @@ impl App {
         }
     }
 
-    /// Restore the last opened file and execution states from persisted state
-    fn restore_last_opened_file(&mut self) {
+    /// Load file tree and restore all persisted state
+    fn load_file_tree_and_restore_state(&mut self) -> Result<()> {
         let state_path = self.get_state_file_path();
+        let persisted_state = std::fs::read_to_string(&state_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<PersistedState>(&content).ok());
 
-        if let Ok(content) = std::fs::read_to_string(&state_path) {
-            if let Ok(state) = serde_json::from_str::<PersistedState>(&content) {
-                // Restore file execution states
-                self.file_execution_states = state.file_execution_states;
+        // Load file tree
+        self.file_tree = Self::load_directory_children(&self.working_dir, 0)?;
 
-                // Restore selected environment
-                if let Some(env) = state.selected_environment {
-                    if self.environments.contains(&env) {
-                        self.current_environment = env;
-                        let _ = self.load_current_environment_variables();
-                    }
+        // Restore expanded folders if we have persisted state, otherwise auto-expand
+        if let Some(ref state) = persisted_state {
+            if !state.expanded_folders.is_empty() {
+                // Restore saved expanded state
+                self.restore_expanded_folders(&state.expanded_folders);
+            } else {
+                // No saved state, auto-expand directories with .hurl files
+                self.auto_expand_hurl_directories();
+            }
+
+            // Restore file execution states
+            self.file_execution_states = state.file_execution_states.clone();
+
+            // Restore selected environment (will be applied after load_environments)
+            if let Some(ref env) = state.selected_environment {
+                if self.environments.contains(env) {
+                    self.current_environment = env.clone();
+                    let _ = self.load_current_environment_variables();
                 }
+            }
 
-                // Restore last opened file
-                if let Some(file_path) = state.last_opened_file {
-                    let path = PathBuf::from(&file_path);
-                    if path.exists() {
-                        let _ = self.preview_file(&path);
+            // Restore last opened file
+            if let Some(ref file_path) = state.last_opened_file {
+                let path = PathBuf::from(file_path);
+                if path.exists() {
+                    let _ = self.preview_file(&path);
 
-                        // Try to restore file tree index
-                        let max = self.get_visible_file_count().saturating_sub(1);
-                        self.file_tree_index = state.file_tree_index.min(max);
+                    // Try to restore file tree index
+                    let max = self.get_visible_file_count().saturating_sub(1);
+                    self.file_tree_index = state.file_tree_index.min(max);
+                    self.file_tree_state.select(Some(self.file_tree_index));
 
-                        self.set_status(
-                            &format!(
-                                "Restored: {}",
-                                path.file_name()
-                                    .map(|n| n.to_string_lossy().to_string())
-                                    .unwrap_or_default()
-                            ),
-                            StatusLevel::Info,
-                        );
+                    self.set_status(
+                        &format!(
+                            "Restored: {}",
+                            path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        ),
+                        StatusLevel::Info,
+                    );
+                }
+            }
+        } else {
+            // No persisted state, auto-expand directories with .hurl files
+            self.auto_expand_hurl_directories();
+        }
+
+        Ok(())
+    }
+
+    /// Restore expanded folders from persisted state
+    fn restore_expanded_folders(&mut self, expanded_paths: &[String]) {
+        let working_dir = self.working_dir.clone();
+        Self::restore_expanded_recursive(&mut self.file_tree, expanded_paths, &working_dir);
+    }
+
+    /// Recursively restore expanded state for folders
+    fn restore_expanded_recursive(
+        entries: &mut [FileEntry],
+        expanded_paths: &[String],
+        working_dir: &PathBuf,
+    ) {
+        for entry in entries.iter_mut() {
+            if entry.is_dir {
+                let relative = entry
+                    .path
+                    .strip_prefix(working_dir)
+                    .unwrap_or(&entry.path)
+                    .to_string_lossy()
+                    .to_string();
+
+                if expanded_paths.contains(&relative) {
+                    entry.is_expanded = true;
+
+                    // Load children if not already loaded
+                    if entry.children.is_empty() {
+                        if let Ok(children) =
+                            App::load_directory_children(&entry.path, entry.depth + 1)
+                        {
+                            entry.children = children;
+                        }
                     }
+
+                    // Recursively restore children
+                    Self::restore_expanded_recursive(&mut entry.children, expanded_paths, working_dir);
                 }
             }
         }
@@ -582,6 +674,7 @@ impl App {
             KeyCode::Char('F') => {
                 self.filter_query.clear();
                 self.file_tree_index = 0;
+                self.file_tree_state.select(Some(0));
                 self.set_status("Filter cleared", StatusLevel::Info);
             }
 
@@ -867,10 +960,12 @@ impl App {
             KeyCode::Backspace => {
                 self.filter_query.pop();
                 self.file_tree_index = 0;
+                self.file_tree_state.select(Some(0));
             }
             KeyCode::Char(c) => {
                 self.filter_query.push(c);
                 self.file_tree_index = 0;
+                self.file_tree_state.select(Some(0));
             }
             _ => {}
         }
@@ -1008,6 +1103,7 @@ impl App {
                 let max = self.get_visible_file_count().saturating_sub(1);
                 if self.file_tree_index < max {
                     self.file_tree_index += 1;
+                    self.file_tree_state.select(Some(self.file_tree_index));
                     self.auto_preview_selected_file();
                 }
             }
@@ -1032,6 +1128,7 @@ impl App {
             ActivePanel::FileBrowser => {
                 let old_index = self.file_tree_index;
                 self.file_tree_index = self.file_tree_index.saturating_sub(1);
+                self.file_tree_state.select(Some(self.file_tree_index));
                 if self.file_tree_index != old_index {
                     self.auto_preview_selected_file();
                 }
@@ -1066,7 +1163,10 @@ impl App {
     /// Go to top
     fn go_to_top(&mut self) {
         match self.active_panel {
-            ActivePanel::FileBrowser => self.file_tree_index = 0,
+            ActivePanel::FileBrowser => {
+                self.file_tree_index = 0;
+                self.file_tree_state.select(Some(0));
+            }
             ActivePanel::Editor => self.editor_scroll = 0,
             ActivePanel::Response => self.response_scroll = 0,
             ActivePanel::Assertions => self.assertions_scroll = 0,
@@ -1079,6 +1179,7 @@ impl App {
         match self.active_panel {
             ActivePanel::FileBrowser => {
                 self.file_tree_index = self.get_visible_file_count().saturating_sub(1);
+                self.file_tree_state.select(Some(self.file_tree_index));
             }
             ActivePanel::Editor => {
                 self.editor_scroll = self.editor_content.len().saturating_sub(1);
@@ -1126,6 +1227,8 @@ impl App {
                 }
             }
         }
+        // Save expanded state
+        self.save_state();
     }
 
     /// Get the count of visible files in the tree (respects filter)
@@ -1184,11 +1287,22 @@ impl App {
         None
     }
 
-    /// Refresh the file tree
+    /// Refresh the file tree (preserves expanded state)
     pub fn refresh_file_tree(&mut self) -> Result<()> {
+        // Collect currently expanded folders before refreshing
+        let expanded = self.collect_expanded_folders();
+
+        // Reload the file tree
         self.file_tree = Self::load_directory_children(&self.working_dir, 0)?;
-        // Auto-expand directories containing .hurl files
-        self.auto_expand_hurl_directories();
+
+        // Restore expanded state
+        if !expanded.is_empty() {
+            self.restore_expanded_folders(&expanded);
+        } else {
+            // No folders were expanded, auto-expand directories with .hurl files
+            self.auto_expand_hurl_directories();
+        }
+
         Ok(())
     }
 
@@ -2234,6 +2348,7 @@ impl App {
         let mut index = 0;
         if let Some(found_index) = find_matching(&self.file_tree, &query, &mut index) {
             self.file_tree_index = found_index;
+            self.file_tree_state.select(Some(found_index));
             self.set_status(&format!("Found: {}", self.search_query), StatusLevel::Info);
         } else {
             self.set_status("No matches found", StatusLevel::Warning);

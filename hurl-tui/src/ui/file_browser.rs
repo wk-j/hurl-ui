@@ -14,7 +14,7 @@ use super::theme::{BoxChars, HackerTheme};
 use crate::app::{ActivePanel, App, AppMode};
 
 /// Render the file browser panel
-pub fn render_file_browser(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_file_browser(frame: &mut Frame, app: &mut App, area: Rect) {
     let is_active = app.active_panel == ActivePanel::FileBrowser;
     let is_filtering = app.mode == AppMode::Filter;
 
@@ -96,7 +96,13 @@ pub fn render_file_browser(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .style(Style::default().bg(HackerTheme::VOID_BLACK));
+        .style(Style::default().bg(HackerTheme::VOID_BLACK))
+        .highlight_style(
+            Style::default()
+                .fg(HackerTheme::SELECTED_FG)
+                .bg(HackerTheme::SELECTED_BG)
+                .add_modifier(Modifier::BOLD),
+        );
 
-    frame.render_widget(list, area);
+    frame.render_stateful_widget(list, area, &mut app.file_tree_state);
 }
