@@ -2410,9 +2410,11 @@ impl App {
             let new_line = content.split_off(col.min(content.len()));
             self.editor_content.insert(line + 1, new_line);
             self.editor_cursor = (line + 1, 0);
+            self.ensure_cursor_visible();
         } else {
             self.editor_content.push(String::new());
             self.editor_cursor = (self.editor_content.len() - 1, 0);
+            self.ensure_cursor_visible();
         }
     }
 
@@ -2434,6 +2436,7 @@ impl App {
                 let new_col = prev_line.len();
                 prev_line.push_str(&current_line);
                 self.editor_cursor = (line - 1, new_col);
+                self.ensure_cursor_visible();
             }
         }
     }
@@ -2466,6 +2469,7 @@ impl App {
                 .editor_content
                 .get(self.editor_cursor.0)
                 .map_or(0, |l| l.len());
+            self.ensure_cursor_visible();
         }
     }
 
@@ -2480,6 +2484,7 @@ impl App {
         } else if self.editor_cursor.0 + 1 < self.editor_content.len() {
             self.editor_cursor.0 += 1;
             self.editor_cursor.1 = 0;
+            self.ensure_cursor_visible();
         }
     }
 
@@ -2491,6 +2496,7 @@ impl App {
                 .get(self.editor_cursor.0)
                 .map_or(0, |l| l.len());
             self.editor_cursor.1 = self.editor_cursor.1.min(line_len);
+            self.ensure_cursor_visible();
         }
     }
 
@@ -2502,6 +2508,25 @@ impl App {
                 .get(self.editor_cursor.0)
                 .map_or(0, |l| l.len());
             self.editor_cursor.1 = self.editor_cursor.1.min(line_len);
+            self.ensure_cursor_visible();
+        }
+    }
+
+    /// Ensure the cursor is visible by adjusting editor_scroll.
+    /// Uses a default visible height of 20 lines (approximate terminal height minus borders).
+    fn ensure_cursor_visible(&mut self) {
+        // Use a reasonable default for visible height
+        // This will be approximately correct for most terminal sizes
+        let visible_height = 20_usize;
+
+        // If cursor is above the visible area, scroll up
+        if self.editor_cursor.0 < self.editor_scroll {
+            self.editor_scroll = self.editor_cursor.0;
+        }
+
+        // If cursor is below the visible area, scroll down
+        if self.editor_cursor.0 >= self.editor_scroll + visible_height {
+            self.editor_scroll = self.editor_cursor.0 - visible_height + 1;
         }
     }
 
@@ -2563,6 +2588,7 @@ impl App {
                 self.editor_cursor = (line + 1, 0);
                 // Skip leading whitespace on next line
                 self.editor_move_to_first_non_whitespace();
+                self.ensure_cursor_visible();
             } else {
                 // End of file, go to end of line
                 self.editor_cursor.1 = chars.len();
@@ -2594,6 +2620,7 @@ impl App {
             if let Some(prev_line) = self.editor_content.get(line - 1) {
                 self.editor_cursor.1 = prev_line.len();
             }
+            self.ensure_cursor_visible();
         }
     }
 
@@ -2622,6 +2649,7 @@ impl App {
             } else if line + 1 < self.editor_content.len() {
                 // Move to next line
                 self.editor_cursor = (line + 1, 0);
+                self.ensure_cursor_visible();
             }
         }
     }
@@ -2630,12 +2658,14 @@ impl App {
         let line = self.editor_cursor.0;
         self.editor_content.insert(line + 1, String::new());
         self.editor_cursor = (line + 1, 0);
+        self.ensure_cursor_visible();
     }
 
     fn editor_insert_line_above(&mut self) {
         let line = self.editor_cursor.0;
         self.editor_content.insert(line, String::new());
         self.editor_cursor = (line, 0);
+        self.ensure_cursor_visible();
     }
 
     fn editor_delete_char(&mut self) {
