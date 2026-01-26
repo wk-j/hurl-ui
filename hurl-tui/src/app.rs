@@ -361,7 +361,27 @@ impl App {
         // Load environments
         app.load_environments()?;
 
+        // Restore selected environment from persisted state (must happen after load_environments)
+        app.restore_selected_environment();
+
         Ok(app)
+    }
+
+    /// Restore selected environment from persisted state
+    fn restore_selected_environment(&mut self) {
+        let state_path = self.get_state_file_path();
+        let persisted_state = std::fs::read_to_string(&state_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<PersistedState>(&content).ok());
+
+        if let Some(state) = persisted_state {
+            if let Some(ref env) = state.selected_environment {
+                if self.environments.contains(env) {
+                    self.current_environment = env.clone();
+                    let _ = self.load_current_environment_variables();
+                }
+            }
+        }
     }
 
     /// Get the state file path for the current working directory
@@ -449,13 +469,8 @@ impl App {
             // Restore file execution states
             self.file_execution_states = state.file_execution_states.clone();
 
-            // Restore selected environment (will be applied after load_environments)
-            if let Some(ref env) = state.selected_environment {
-                if self.environments.contains(env) {
-                    self.current_environment = env.clone();
-                    let _ = self.load_current_environment_variables();
-                }
-            }
+            // Note: Environment restoration happens in restore_selected_environment()
+            // after load_environments() populates the environments list
 
             // Restore last opened file
             if let Some(ref file_path) = state.last_opened_file {
