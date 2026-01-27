@@ -20,8 +20,12 @@ pub struct AppLayout {
     pub status_bar: Rect,
 }
 
-/// Create the application layout
-pub fn create_layout(area: Rect) -> AppLayout {
+/// Create the application layout with configurable sidebar width
+pub fn create_layout(area: Rect, sidebar_width: u16) -> AppLayout {
+    // Clamp sidebar width to reasonable bounds (10-50%)
+    let sidebar_pct = sidebar_width.clamp(10, 50);
+    let main_pct = 100 - sidebar_pct;
+
     // Main vertical split: content area and status bar
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -38,8 +42,8 @@ pub fn create_layout(area: Rect) -> AppLayout {
     let horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(20), // Left sidebar
-            Constraint::Percentage(80), // Main content
+            Constraint::Percentage(sidebar_pct), // Left sidebar
+            Constraint::Percentage(main_pct),    // Main content
         ])
         .split(content_area);
 

@@ -27,7 +27,7 @@ pub use variables::render_variables;
 
 /// Main draw function that renders the entire UI
 pub fn draw(frame: &mut Frame, app: &mut App) {
-    let layout = create_layout(frame.area());
+    let layout = create_layout(frame.area(), app.sidebar_width);
 
     // Render file browser (left panel)
     render_file_browser(frame, app, layout.file_browser);

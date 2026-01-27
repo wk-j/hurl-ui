@@ -222,7 +222,10 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
                 .fg(HackerTheme::MATRIX_GREEN)
                 .add_modifier(Modifier::BOLD),
         )
-        .divider(Span::styled(" | ", Style::default().fg(HackerTheme::TEXT_MUTED)));
+        .divider(Span::styled(
+            " | ",
+            Style::default().fg(HackerTheme::TEXT_MUTED),
+        ));
 
     frame.render_widget(tabs, chunks[1]);
 
@@ -264,7 +267,11 @@ fn render_body_tab(
         // Try to pretty-print and syntax highlight JSON
         let body_lines = format_body_with_highlighting(&response.body);
 
-        for line in body_lines.iter().skip(scroll).take(visible_height.saturating_sub(1)) {
+        for line in body_lines
+            .iter()
+            .skip(scroll)
+            .take(visible_height.saturating_sub(1))
+        {
             lines.push(line.clone());
         }
 
@@ -320,12 +327,19 @@ fn render_headers_tab(
                         .fg(HackerTheme::SYNTAX_HEADER)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(value.clone(), Style::default().fg(HackerTheme::SYNTAX_VALUE)),
+                Span::styled(
+                    value.clone(),
+                    Style::default().fg(HackerTheme::SYNTAX_VALUE),
+                ),
             ]));
         }
 
         // Apply scroll and visible height
-        for line in header_lines.iter().skip(scroll).take(visible_height.saturating_sub(1)) {
+        for line in header_lines
+            .iter()
+            .skip(scroll)
+            .take(visible_height.saturating_sub(1))
+        {
             lines.push(line.clone());
         }
 
@@ -412,7 +426,11 @@ fn render_raw_tab(
         }
 
         // Apply scroll and visible height
-        for line in raw_lines.iter().skip(scroll).take(visible_height.saturating_sub(1)) {
+        for line in raw_lines
+            .iter()
+            .skip(scroll)
+            .take(visible_height.saturating_sub(1))
+        {
             lines.push(line.clone());
         }
 
@@ -440,7 +458,7 @@ fn render_raw_tab(
 /// Format the response body with syntax highlighting for JSON
 fn format_body_with_highlighting(body: &str) -> Vec<Line<'static>> {
     let trimmed = body.trim();
-    
+
     // Try to parse as JSON and pretty-print with highlighting
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(trimmed) {
         if let Ok(pretty) = serde_json::to_string_pretty(&json) {
@@ -458,7 +476,7 @@ fn format_body_with_highlighting(body: &str) -> Vec<Line<'static>> {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(potential_json) {
             if let Ok(pretty) = serde_json::to_string_pretty(&json) {
                 let mut lines: Vec<Line<'static>> = Vec::new();
-                
+
                 // Add any prefix content before JSON
                 if json_start > 0 {
                     for line in trimmed[..json_start].lines() {
@@ -468,12 +486,12 @@ fn format_body_with_highlighting(body: &str) -> Vec<Line<'static>> {
                         )));
                     }
                 }
-                
+
                 // Add formatted JSON
                 for line in pretty.lines() {
                     lines.push(highlight_json_line(line));
                 }
-                
+
                 return lines;
             }
         }
@@ -482,14 +500,14 @@ fn format_body_with_highlighting(body: &str) -> Vec<Line<'static>> {
     // Try to handle multiple JSON objects (one per line - NDJSON format)
     let mut all_lines: Vec<Line<'static>> = Vec::new();
     let mut found_any_json = false;
-    
+
     for line in body.lines() {
         let line_trimmed = line.trim();
         if line_trimmed.is_empty() {
             all_lines.push(Line::from(""));
             continue;
         }
-        
+
         // Try to parse each line as JSON
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(line_trimmed) {
             found_any_json = true;
@@ -508,7 +526,7 @@ fn format_body_with_highlighting(body: &str) -> Vec<Line<'static>> {
             )));
         }
     }
-    
+
     if found_any_json {
         return all_lines;
     }
@@ -534,10 +552,7 @@ fn highlight_json_line(line: &str) -> Line<'static> {
 
     // Add indentation
     if indent > 0 {
-        spans.push(Span::styled(
-            " ".repeat(indent),
-            Style::default(),
-        ));
+        spans.push(Span::styled(" ".repeat(indent), Style::default()));
     }
 
     // Simple JSON syntax highlighting

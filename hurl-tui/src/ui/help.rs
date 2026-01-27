@@ -68,6 +68,7 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
         help_line("f / F", "Filter / Clear filter"),
         help_line("p / P", "Copy / Paste file"),
         help_line("n", "Rename file"),
+        help_line("[ / ]", "Resize sidebar"),
         Line::from(""),
         Line::from(Span::styled(
             format!("{} ACTIONS", BoxChars::TRIANGLE_RIGHT),

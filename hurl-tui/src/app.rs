@@ -90,6 +90,14 @@ struct PersistedState {
     /// Expanded folder paths (relative to working directory)
     #[serde(default)]
     expanded_folders: Vec<String>,
+    /// Sidebar width percentage (default 20)
+    #[serde(default = "default_sidebar_width")]
+    sidebar_width: u16,
+}
+
+/// Default sidebar width percentage
+fn default_sidebar_width() -> u16 {
+    20
 }
 
 /// Active panel in the UI
@@ -307,6 +315,9 @@ pub struct App {
 
     /// Current response tab (Body, Headers, Raw)
     pub response_tab: ResponseTab,
+
+    /// Sidebar width percentage (10-50)
+    pub sidebar_width: u16,
 }
 
 impl App {
@@ -353,9 +364,10 @@ impl App {
             previous_panel: ActivePanel::FileBrowser,
             previous_show_help: false,
             response_tab: ResponseTab::Body,
+            sidebar_width: default_sidebar_width(),
         };
 
-        // Load file tree and restore state (including expanded folders)
+        // Load file tree and restore state (including expanded folders and sidebar width)
         app.load_file_tree_and_restore_state()?;
 
         // Load environments
@@ -439,6 +451,7 @@ impl App {
                 Some(self.current_environment.clone())
             },
             expanded_folders: self.collect_expanded_folders(),
+            sidebar_width: self.sidebar_width,
         };
 
         if let Ok(content) = serde_json::to_string_pretty(&state) {
@@ -468,6 +481,9 @@ impl App {
 
             // Restore file execution states
             self.file_execution_states = state.file_execution_states.clone();
+
+            // Restore sidebar width
+            self.sidebar_width = state.sidebar_width.clamp(10, 50);
 
             // Note: Environment restoration happens in restore_selected_environment()
             // after load_environments() populates the environments list
@@ -787,6 +803,14 @@ impl App {
                     self.response_tab = ResponseTab::Raw;
                     self.response_scroll = 0;
                 }
+            }
+
+            // Sidebar resize
+            KeyCode::Char('[') => {
+                self.resize_sidebar(-2);
+            }
+            KeyCode::Char(']') => {
+                self.resize_sidebar(2);
             }
 
             _ => {}
@@ -1711,6 +1735,15 @@ impl App {
                 StatusLevel::Info,
             );
             // Save state to persist selected environment
+            self.save_state();
+        }
+    }
+
+    /// Resize sidebar by delta (positive = wider, negative = narrower)
+    fn resize_sidebar(&mut self, delta: i16) {
+        let new_width = (self.sidebar_width as i16 + delta).clamp(10, 50) as u16;
+        if new_width != self.sidebar_width {
+            self.sidebar_width = new_width;
             self.save_state();
         }
     }
