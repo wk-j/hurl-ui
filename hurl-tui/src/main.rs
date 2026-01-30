@@ -102,9 +102,13 @@ fn open_tty() -> Result<File> {
 fn init_logging() -> Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
 
+    // Write logs to file instead of stderr to avoid messing up TUI
+    let log_file = std::fs::File::create("/tmp/hurl-tui.log")
+        .unwrap_or_else(|_| std::fs::File::create("/dev/null").unwrap());
+
     tracing_subscriber::registry()
         .with(filter)
-        .with(tracing_subscriber::fmt::layer().with_writer(io::stderr))
+        .with(tracing_subscriber::fmt::layer().with_writer(std::sync::Mutex::new(log_file)))
         .init();
 
     Ok(())

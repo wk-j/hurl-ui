@@ -84,9 +84,9 @@ struct PersistedState {
     /// Execution results per file (keyed by relative path)
     #[serde(default)]
     file_execution_states: HashMap<String, ExecutionResult>,
-    /// Last selected environment
+    /// Last selected environment file path (full path to .env file)
     #[serde(default)]
-    selected_environment: Option<String>,
+    selected_env_file: Option<String>,
     /// Expanded folder paths (relative to working directory)
     #[serde(default)]
     expanded_folders: Vec<String>,
@@ -372,28 +372,103 @@ impl App {
 
         // Load environments
         app.load_environments()?;
+        tracing::debug!(
+            "After load_environments: env={}, file={:?}",
+            app.current_environment,
+            app.current_env_file
+        );
 
         // Restore selected environment from persisted state (must happen after load_environments)
         app.restore_selected_environment();
+        tracing::debug!(
+            "After restore_selected_environment: env={}, file={:?}",
+            app.current_environment,
+            app.current_env_file
+        );
+
+        // Don't save state on startup - only save on user actions
+        // This prevents overwriting the persisted state with defaults
 
         Ok(app)
     }
 
-    /// Restore selected environment from persisted state
+    /// Restore selected environment from persisted state, or default to first available
     fn restore_selected_environment(&mut self) {
         let state_path = self.get_state_file_path();
-        let persisted_state = std::fs::read_to_string(&state_path)
-            .ok()
-            .and_then(|content| serde_json::from_str::<PersistedState>(&content).ok());
+        tracing::debug!("Reading state from: {:?}", state_path);
+        
+        let state_content = std::fs::read_to_string(&state_path).ok();
+        tracing::debug!("State file content exists: {}", state_content.is_some());
+        
+        let persisted_state = state_content
+            .and_then(|content| {
+                let result = serde_json::from_str::<PersistedState>(&content);
+                if let Err(ref e) = result {
+                    tracing::warn!("Failed to parse state: {}", e);
+                }
+                result.ok()
+            });
+
+        let mut restored = false;
 
         if let Some(state) = persisted_state {
-            if let Some(ref env) = state.selected_environment {
-                if self.environments.contains(env) {
-                    self.current_environment = env.clone();
-                    let _ = self.load_current_environment_variables();
+            tracing::debug!("Parsed state, selected_env_file: {:?}", state.selected_env_file);
+            if let Some(ref env_file_path) = state.selected_env_file {
+                let env_path = PathBuf::from(env_file_path);
+                if env_path.exists() {
+                    let _ = self.load_environment_from_file(&env_path);
+                    tracing::debug!("Restored env file: {:?}", env_path);
+                    restored = true;
+                } else {
+                    tracing::warn!("Persisted env file not found: {:?}", env_path);
+                }
+            } else {
+                tracing::debug!("No env file in persisted state");
+            }
+        } else {
+            tracing::debug!("No persisted state found or failed to parse");
+        }
+
+        // Fall back to first environment if nothing was restored
+        if !restored && !self.environments.is_empty() {
+            self.current_environment = self.environments[0].clone();
+            let _ = self.load_current_environment_variables();
+            tracing::debug!("Defaulted to first env: {}", self.current_environment);
+        }
+    }
+
+    /// Load environment from a specific file path
+    fn load_environment_from_file(&mut self, env_file: &PathBuf) -> Result<()> {
+        self.variables.clear();
+
+        // Extract environment name from file stem
+        if let Some(name) = env_file.file_stem() {
+            self.current_environment = name.to_string_lossy().to_string();
+        }
+
+        // Store the file path for --variables-file
+        self.current_env_file = Some(env_file.clone());
+
+        // Parse variables for UI display
+        if let Ok(content) = std::fs::read_to_string(env_file) {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some((key, value)) = line.split_once('=') {
+                    self.variables.push(Variable {
+                        name: key.trim().to_string(),
+                        value: value.trim().to_string(),
+                        is_secret: key.to_lowercase().contains("secret")
+                            || key.to_lowercase().contains("password")
+                            || key.to_lowercase().contains("token"),
+                    });
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Get the state file path for the current working directory
@@ -445,14 +520,19 @@ impl App {
                 .map(|p| p.to_string_lossy().to_string()),
             file_tree_index: self.file_tree_index,
             file_execution_states: self.file_execution_states.clone(),
-            selected_environment: if self.current_environment.is_empty() {
-                None
-            } else {
-                Some(self.current_environment.clone())
-            },
+            selected_env_file: self
+                .current_env_file
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
             expanded_folders: self.collect_expanded_folders(),
             sidebar_width: self.sidebar_width,
         };
+
+        tracing::debug!(
+            "Saving state: current_env_file={:?}, selected_env_file={:?}",
+            self.current_env_file,
+            state.selected_env_file
+        );
 
         if let Ok(content) = serde_json::to_string_pretty(&state) {
             let _ = std::fs::write(self.get_state_file_path(), content);
@@ -1507,8 +1587,8 @@ impl App {
             self.set_status(&format!("Preview: {}", file_name), StatusLevel::Info);
         }
 
-        // Save state for next session
-        self.save_state();
+        // Note: Don't save state here - it will be saved when user takes action
+        // This prevents overwriting env state during initialization
 
         Ok(())
     }
@@ -1519,6 +1599,8 @@ impl App {
             if !entry.is_dir && entry.path.extension().map_or(false, |e| e == "hurl" || e == "env") {
                 let path = entry.path.clone();
                 let _ = self.preview_file(&path);
+                // Save state when user selects a file
+                self.save_state();
             }
         }
     }
@@ -1660,11 +1742,8 @@ impl App {
         // Sort environments alphabetically
         self.environments.sort();
 
-        // Set current environment to first one if available
-        if !self.environments.is_empty() {
-            self.current_environment = self.environments[0].clone();
-            self.load_current_environment_variables()?;
-        }
+        // Don't set default here - let restore_selected_environment() handle it
+        // or fall back to first one after restore attempt
 
         Ok(())
     }
@@ -1675,11 +1754,18 @@ impl App {
         self.current_env_file = None;
 
         if self.current_environment.is_empty() {
+            tracing::debug!("load_current_environment_variables: current_environment is empty");
             return Ok(());
         }
 
         // Find the env file recursively
         let env_files = Self::find_env_files(&self.working_dir);
+        tracing::debug!(
+            "load_current_environment_variables: looking for '{}' in {:?}",
+            self.current_environment,
+            env_files
+        );
+        
         let env_file = env_files.into_iter().find(|p| {
             p.file_stem()
                 .map(|s| s.to_string_lossy() == self.current_environment)
@@ -1687,8 +1773,14 @@ impl App {
         });
 
         let Some(env_file) = env_file else {
+            tracing::warn!(
+                "load_current_environment_variables: no file found for '{}'",
+                self.current_environment
+            );
             return Ok(());
         };
+        
+        tracing::debug!("load_current_environment_variables: found {:?}", env_file);
 
         // Store the file path for --variables-file
         self.current_env_file = Some(env_file.clone());
@@ -1722,21 +1814,27 @@ impl App {
             return;
         }
 
-        if let Some(idx) = self
+        // Find current position, default to 0 if not found
+        let idx = self
             .environments
             .iter()
             .position(|e| e == &self.current_environment)
-        {
-            let next_idx = (idx + 1) % self.environments.len();
-            self.current_environment = self.environments[next_idx].clone();
-            let _ = self.load_current_environment_variables();
-            self.set_status(
-                &format!("Environment: {}", self.current_environment),
-                StatusLevel::Info,
-            );
-            // Save state to persist selected environment
-            self.save_state();
-        }
+            .unwrap_or(0);
+
+        let next_idx = (idx + 1) % self.environments.len();
+        self.current_environment = self.environments[next_idx].clone();
+        let _ = self.load_current_environment_variables();
+        tracing::debug!(
+            "Cycled environment: {} -> {:?}",
+            self.current_environment,
+            self.current_env_file
+        );
+        self.set_status(
+            &format!("Environment: {}", self.current_environment),
+            StatusLevel::Info,
+        );
+        // Save state to persist selected environment
+        self.save_state();
     }
 
     /// Resize sidebar by delta (positive = wider, negative = narrower)
