@@ -71,6 +71,7 @@ hurl-tui /path/to/hurl/files
 | `Enter` | Open file / Run request |
 | `Space` | Expand/collapse folder |
 | `r` | Run current request |
+| `W` | Run & write output to file |
 | `e` | Enter edit mode (vim) |
 | `v` | Toggle variables panel |
 | `E` | Cycle environment |
@@ -122,6 +123,7 @@ When in edit mode (`e`), the editor uses vim-style keybindings:
 |-----|--------|
 | `y` | Copy file path to clipboard |
 | `Y` | Copy response to clipboard |
+| `W` | Run & write output to file (e.g., `test.hurl` -> `test.output`) |
 | `c` | Copy AI context (request + response + assertions) |
 | `C` | Copy hurl command to clipboard |
 | `o` | Output AI context to stdout and quit |
@@ -227,6 +229,8 @@ Create a configuration file at `~/.config/hurl-tui/config.toml`:
 [general]
 timeout = 30
 max_history = 100
+# Optional: directory for output files (default: same as hurl file)
+# output_dir = "/path/to/outputs"
 
 [ui]
 show_line_numbers = true
@@ -238,6 +242,21 @@ tab_size = 2
 use_spaces = true
 auto_save = false
 ```
+
+### Output Files
+
+Press `W` to run the current request and write the response body to a file. The output file is automatically named after the hurl file:
+
+- `api/users.hurl` -> `api/users.output`
+
+If `output_dir` is configured, all output files are written there instead:
+
+```toml
+[general]
+output_dir = "outputs"
+```
+
+This would write to `outputs/users.output` regardless of where the hurl file is located.
 
 ## Project Structure
 

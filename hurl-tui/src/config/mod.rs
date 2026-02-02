@@ -53,6 +53,9 @@ pub struct GeneralConfig {
     /// Maximum history entries
     #[serde(default = "default_max_history")]
     pub max_history: usize,
+
+    /// Output directory for saving response files (default: same directory as hurl file)
+    pub output_dir: Option<PathBuf>,
 }
 
 impl Default for GeneralConfig {
@@ -62,6 +65,7 @@ impl Default for GeneralConfig {
             hurl_path: None,
             timeout: default_timeout(),
             max_history: default_max_history(),
+            output_dir: None,
         }
     }
 }

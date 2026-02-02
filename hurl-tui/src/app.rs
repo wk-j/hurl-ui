@@ -12,7 +12,7 @@ use crate::config::Config;
 use crate::effects::{presets, EffectId, EffectManager};
 use crate::parser::HurlFile;
 use crate::runner::{ExecutionResult, Runner};
-use crate::ui::ResponseTab;
+use crate::ui::{EditorTab, ResponseTab};
 
 /// Directories to skip when scanning for .hurl files
 /// These are common build output, dependency, and cache directories
@@ -316,6 +316,12 @@ pub struct App {
     /// Current response tab (Body, Headers, Raw)
     pub response_tab: ResponseTab,
 
+    /// Current editor tab (Hurl, Output)
+    pub editor_tab: EditorTab,
+
+    /// Output file scroll offset
+    pub output_scroll: usize,
+
     /// Sidebar width percentage (10-50)
     pub sidebar_width: u16,
 }
@@ -364,6 +370,8 @@ impl App {
             previous_panel: ActivePanel::FileBrowser,
             previous_show_help: false,
             response_tab: ResponseTab::Body,
+            editor_tab: EditorTab::Hurl,
+            output_scroll: 0,
             sidebar_width: default_sidebar_width(),
         };
 
@@ -835,6 +843,11 @@ impl App {
                 self.copy_response();
             }
 
+            // Run and write output to file (W = write output)
+            KeyCode::Char('W') => {
+                self.run_and_write_output().await?;
+            }
+
             // Copy AI context (c = copy context for AI)
             KeyCode::Char('c') => {
                 self.copy_ai_context();
@@ -865,17 +878,22 @@ impl App {
                 self.start_rename();
             }
 
-            // Response tab switching (when in Response panel)
+            // Tab switching with number keys
             KeyCode::Char('1') => {
                 if self.active_panel == ActivePanel::Response {
                     self.response_tab = ResponseTab::Body;
                     self.response_scroll = 0;
+                } else if self.active_panel == ActivePanel::Editor {
+                    self.editor_tab = EditorTab::Hurl;
                 }
             }
             KeyCode::Char('2') => {
                 if self.active_panel == ActivePanel::Response {
                     self.response_tab = ResponseTab::Headers;
                     self.response_scroll = 0;
+                } else if self.active_panel == ActivePanel::Editor {
+                    self.editor_tab = EditorTab::Output;
+                    self.output_scroll = 0;
                 }
             }
             KeyCode::Char('3') => {
@@ -1227,8 +1245,15 @@ impl App {
                 }
             }
             ActivePanel::Editor => {
-                if self.editor_scroll < self.editor_content.len().saturating_sub(1) {
-                    self.editor_scroll += 1;
+                match self.editor_tab {
+                    EditorTab::Hurl => {
+                        if self.editor_scroll < self.editor_content.len().saturating_sub(1) {
+                            self.editor_scroll += 1;
+                        }
+                    }
+                    EditorTab::Output => {
+                        self.output_scroll += 1;
+                    }
                 }
             }
             ActivePanel::Response => {
@@ -1253,7 +1278,14 @@ impl App {
                 }
             }
             ActivePanel::Editor => {
-                self.editor_scroll = self.editor_scroll.saturating_sub(1);
+                match self.editor_tab {
+                    EditorTab::Hurl => {
+                        self.editor_scroll = self.editor_scroll.saturating_sub(1);
+                    }
+                    EditorTab::Output => {
+                        self.output_scroll = self.output_scroll.saturating_sub(1);
+                    }
+                }
             }
             ActivePanel::Response => {
                 self.response_scroll = self.response_scroll.saturating_sub(1);
@@ -1286,7 +1318,12 @@ impl App {
                 self.file_tree_index = 0;
                 self.file_tree_state.select(Some(0));
             }
-            ActivePanel::Editor => self.editor_scroll = 0,
+            ActivePanel::Editor => {
+                match self.editor_tab {
+                    EditorTab::Hurl => self.editor_scroll = 0,
+                    EditorTab::Output => self.output_scroll = 0,
+                }
+            }
             ActivePanel::Response => self.response_scroll = 0,
             ActivePanel::Assertions => self.assertions_scroll = 0,
             _ => {}
@@ -1911,6 +1948,117 @@ impl App {
         }
     }
 
+    /// Run the current request and write output to a file.
+    ///
+    /// Uses hurl's native `--output` flag to write the response body directly to a file.
+    /// The output filename is derived from the hurl file name:
+    /// - `test.hurl` -> `test.output`
+    ///
+    /// The output directory can be configured via `config.general.output_dir`.
+    /// If not configured, the file is written to the same directory as the hurl file.
+    pub async fn run_and_write_output(&mut self) -> Result<()> {
+        let Some(path) = self.current_file_path.clone() else {
+            self.set_status("No file selected", StatusLevel::Warning);
+            return Ok(());
+        };
+
+        // Only for .hurl files
+        if !path.extension().map_or(false, |e| e == "hurl") {
+            self.set_status("Not a .hurl file", StatusLevel::Warning);
+            return Ok(());
+        }
+
+        // Compute output file path
+        let base_name = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "output".to_string());
+
+        let output_dir = self
+            .config
+            .general
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| {
+                path.parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| self.working_dir.clone())
+            });
+
+        let output_path = output_dir.join(format!("{}.output", base_name));
+
+        self.is_running = true;
+        self.set_status("Running request with output...", StatusLevel::Info);
+        self.trigger_execution_start_effect();
+
+        // Run the request with output file
+        let start = std::time::Instant::now();
+        let result = self
+            .runner
+            .run_with_output(&path, self.current_env_file.as_ref(), Some(&output_path))
+            .await;
+        let duration = start.elapsed();
+
+        self.is_running = false;
+
+        match result {
+            Ok(exec_result) => {
+                let success = exec_result.success;
+                let status_code = exec_result.response.as_ref().map(|r| r.status_code);
+
+                // Add to history
+                self.history.insert(
+                    0,
+                    HistoryEntry {
+                        id: uuid::Uuid::new_v4(),
+                        file_path: path.clone(),
+                        timestamp: chrono::Utc::now(),
+                        duration_ms: duration.as_millis() as u64,
+                        status_code,
+                        success,
+                    },
+                );
+
+                // Store execution result in the per-file cache
+                let relative_path = self.get_relative_path(&path);
+                self.file_execution_states
+                    .insert(relative_path, exec_result.clone());
+
+                self.execution_result = Some(exec_result);
+                self.response_scroll = 0;
+                self.assertions_scroll = 0;
+
+                // Persist state to disk
+                self.save_state();
+
+                // Get relative output path for display
+                let relative_output = output_path
+                    .strip_prefix(&self.working_dir)
+                    .unwrap_or(&output_path)
+                    .to_string_lossy();
+
+                if success {
+                    self.set_status(
+                        &format!("Output: {} ({}ms)", relative_output, duration.as_millis()),
+                        StatusLevel::Success,
+                    );
+                    self.trigger_execution_complete_effect(true);
+                } else {
+                    self.set_status(
+                        &format!("Output: {} (with failures)", relative_output),
+                        StatusLevel::Warning,
+                    );
+                    self.trigger_execution_complete_effect(false);
+                }
+            }
+            Err(e) => {
+                self.set_status(&format!("Error: {e}"), StatusLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Copy text to system clipboard
     fn copy_to_clipboard(&self, text: &str) -> Result<()> {
         use arboard::Clipboard;
@@ -2503,9 +2651,10 @@ impl App {
 
     /// Execute command
     fn execute_command(&mut self) -> Result<()> {
-        let cmd = self.command_input.trim().to_lowercase();
+        let cmd = self.command_input.trim();
+        let cmd_lower = cmd.to_lowercase();
 
-        match cmd.as_str() {
+        match cmd_lower.as_str() {
             "q" | "quit" => {
                 self.quit = true;
             }

@@ -17,7 +17,7 @@ use ratatui::Frame;
 use crate::app::App;
 
 pub use assertions::render_assertions;
-pub use editor::render_editor;
+pub use editor::{render_editor, EditorTab};
 pub use file_browser::render_file_browser;
 pub use help::render_help;
 pub use layout::{create_layout, AppLayout};

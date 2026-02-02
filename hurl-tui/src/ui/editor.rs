@@ -3,21 +3,106 @@
 //! Displays and allows editing of Hurl file content with hacker aesthetic.
 
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Tabs, Wrap},
     Frame,
 };
 
 use super::theme::{BoxChars, HackerTheme};
 use crate::app::{ActivePanel, App, AppMode, VimMode};
 
+/// Editor tab selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EditorTab {
+    #[default]
+    Hurl,
+    Output,
+}
+
+impl EditorTab {
+    pub fn index(&self) -> usize {
+        match self {
+            EditorTab::Hurl => 0,
+            EditorTab::Output => 1,
+        }
+    }
+}
+
 /// Render the editor panel
 pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
     let is_active = app.active_panel == ActivePanel::Editor;
     let is_editing = app.mode == AppMode::Editing;
 
+    let border_color = if is_editing {
+        HackerTheme::MODE_EDIT_FG
+    } else if is_active {
+        HackerTheme::MATRIX_GREEN
+    } else {
+        HackerTheme::BORDER_DIM
+    };
+
+    // Create layout with tabs at the top
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Tab bar
+            Constraint::Min(1),    // Content
+        ])
+        .split(area);
+
+    // Render tabs
+    let tab_titles = vec![
+        Span::styled(
+            " 1:Hurl ",
+            if app.editor_tab == EditorTab::Hurl {
+                Style::default()
+                    .fg(HackerTheme::VOID_BLACK)
+                    .bg(HackerTheme::MATRIX_GREEN)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(HackerTheme::TEXT_MUTED)
+            },
+        ),
+        Span::styled(
+            " 2:Output ",
+            if app.editor_tab == EditorTab::Output {
+                Style::default()
+                    .fg(HackerTheme::VOID_BLACK)
+                    .bg(HackerTheme::MATRIX_GREEN)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(HackerTheme::TEXT_MUTED)
+            },
+        ),
+    ];
+
+    let tabs = Tabs::new(tab_titles)
+        .style(Style::default().bg(HackerTheme::VOID_BLACK))
+        .divider(Span::styled(
+            " ",
+            Style::default().fg(HackerTheme::BORDER_DIM),
+        ))
+        .select(app.editor_tab.index());
+
+    frame.render_widget(tabs, chunks[0]);
+
+    // Render content based on selected tab
+    match app.editor_tab {
+        EditorTab::Hurl => render_hurl_content(frame, app, chunks[1], is_active, is_editing),
+        EditorTab::Output => render_output_content(frame, app, chunks[1], is_active),
+    }
+}
+
+/// Render the Hurl file content (original editor behavior)
+fn render_hurl_content(
+    frame: &mut Frame,
+    app: &App,
+    area: Rect,
+    is_active: bool,
+    is_editing: bool,
+) {
     let vim_mode_str = match (is_editing, app.vim_mode) {
         (true, VimMode::Normal) => "[VIM]",
         (true, VimMode::Insert) => "[INSERT]",
@@ -150,6 +235,116 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
         .wrap(Wrap { trim: false });
 
     frame.render_widget(paragraph, area);
+}
+
+/// Render the output file content
+fn render_output_content(frame: &mut Frame, app: &App, area: Rect, is_active: bool) {
+    let border_color = if is_active {
+        HackerTheme::MATRIX_GREEN
+    } else {
+        HackerTheme::BORDER_DIM
+    };
+
+    // Compute output file path from current hurl file
+    let output_path = app.current_file_path.as_ref().and_then(|hurl_path| {
+        let base_name = hurl_path.file_stem()?.to_string_lossy().to_string();
+        let output_dir = app.config.general.output_dir.clone().unwrap_or_else(|| {
+            hurl_path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| app.working_dir.clone())
+        });
+        Some(output_dir.join(format!("{}.output", base_name)))
+    });
+
+    let (title, content) = match &output_path {
+        Some(path) if path.exists() => {
+            let title = format!(
+                " {} {} ",
+                BoxChars::LAMBDA,
+                path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "output".to_string())
+            );
+            let content = std::fs::read_to_string(path)
+                .unwrap_or_else(|e| format!("Error reading file: {}", e));
+            (title, Some(content))
+        }
+        Some(path) => {
+            let title = format!(" {} Output ", BoxChars::LAMBDA);
+            let filename = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "output".to_string());
+            (title, None)
+        }
+        None => {
+            let title = format!(" {} Output ", BoxChars::LAMBDA);
+            (title, None)
+        }
+    };
+
+    let block = Block::default()
+        .title(title)
+        .title_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        )
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(HackerTheme::VOID_BLACK));
+
+    match content {
+        Some(content) => {
+            // Calculate visible area
+            let inner_height = area.height.saturating_sub(2) as usize;
+            let scroll = app.output_scroll;
+
+            // Build lines with line numbers
+            let lines: Vec<Line> = content
+                .lines()
+                .enumerate()
+                .skip(scroll)
+                .take(inner_height)
+                .map(|(line_num, line_content)| {
+                    let line_number = format!("{:4} {} ", line_num + 1, BoxChars::VERTICAL);
+                    Line::from(vec![
+                        Span::styled(line_number, Style::default().fg(HackerTheme::TEXT_MUTED)),
+                        Span::styled(
+                            line_content.to_string(),
+                            Style::default().fg(HackerTheme::TEXT_PRIMARY),
+                        ),
+                    ])
+                })
+                .collect();
+
+            let paragraph = Paragraph::new(lines)
+                .block(block)
+                .wrap(Wrap { trim: false });
+
+            frame.render_widget(paragraph, area);
+        }
+        None => {
+            let placeholder = Paragraph::new(vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    format!("  {} No output file", BoxChars::DOT),
+                    Style::default().fg(HackerTheme::TEXT_MUTED),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    format!(
+                        "  {} Press [W] to run and write output",
+                        BoxChars::ARROW_RIGHT
+                    ),
+                    Style::default().fg(HackerTheme::TEXT_SECONDARY),
+                )),
+            ])
+            .block(block);
+            frame.render_widget(placeholder, area);
+        }
+    }
 }
 
 /// Highlight a Hurl line and return styled spans

@@ -43,6 +43,19 @@ impl Runner {
         file_path: &PathBuf,
         variables_file: Option<&PathBuf>,
     ) -> Result<ExecutionResult> {
+        self.run_with_output(file_path, variables_file, None).await
+    }
+
+    /// Run a hurl file with optional output file and return the execution result
+    ///
+    /// If `output_file` is provided, hurl will write the response body to that file
+    /// using the `--output` flag.
+    pub async fn run_with_output(
+        &self,
+        file_path: &PathBuf,
+        variables_file: Option<&PathBuf>,
+        output_file: Option<&PathBuf>,
+    ) -> Result<ExecutionResult> {
         let hurl_cmd = self
             .hurl_path
             .as_ref()
@@ -59,6 +72,12 @@ impl Runner {
         if let Some(vars_file) = variables_file {
             cmd.arg("--variables-file");
             cmd.arg(vars_file);
+        }
+
+        // Add --output flag if output file is specified
+        if let Some(out_file) = output_file {
+            cmd.arg("--output");
+            cmd.arg(out_file);
         }
 
         cmd.stdout(Stdio::piped());
