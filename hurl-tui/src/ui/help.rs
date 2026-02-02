@@ -1,6 +1,6 @@
 //! Help overlay
 //!
-//! Displays a help popup with keyboard shortcuts in hacker terminal style.
+//! Displays a help popup with keyboard shortcuts in clean modern style.
 
 use ratatui::{
     style::{Modifier, Style},
@@ -10,124 +10,67 @@ use ratatui::{
 };
 
 use super::layout::centered_rect;
-use super::theme::{BoxChars, HackerTheme};
+use super::theme::HackerTheme;
 use crate::app::App;
 
 /// Render the help overlay
 pub fn render_help(frame: &mut Frame, _app: &App) {
-    let area = centered_rect(60, 70, frame.area());
+    let area = centered_rect(55, 70, frame.area());
 
     // Clear the background
     frame.render_widget(Clear, area);
 
     let block = Block::default()
-        .title(format!(" {} SYSTEM MANUAL ", BoxChars::TERMINAL_PROMPT))
+        .title(" Help ")
         .title_style(
             Style::default()
                 .fg(HackerTheme::MATRIX_GREEN)
                 .add_modifier(Modifier::BOLD),
         )
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(HackerTheme::MATRIX_GREEN))
+        .border_style(Style::default().fg(HackerTheme::BORDER_DIM))
         .style(Style::default().bg(HackerTheme::VOID_BLACK));
 
     let help_text = vec![
-        Line::from(Span::styled(
-            format!(
-                "{} HURL-TUI :: COMMAND REFERENCE {}",
-                BoxChars::GLITCH_2,
-                BoxChars::GLITCH_2
-            ),
-            Style::default()
-                .fg(HackerTheme::MATRIX_GREEN_BRIGHT)
-                .add_modifier(Modifier::BOLD),
-        )),
         Line::from(""),
-        Line::from(Span::styled(
-            format!("{} NAVIGATION", BoxChars::TRIANGLE_RIGHT),
-            Style::default()
-                .fg(HackerTheme::SYNTAX_SECTION)
-                .add_modifier(Modifier::BOLD),
-        )),
-        help_line("j/k Up/Down", "Move cursor"),
+        section_header("Navigation"),
+        help_line("j/k", "Move down/up"),
         help_line("h/l", "Switch panels"),
-        help_line("Tab/S-Tab", "Cycle panels"),
-        help_line("g/G", "Jump to start/end"),
-        help_line("^d/^u", "Page down/up"),
+        help_line("Tab", "Cycle panels"),
+        help_line("g/G", "Go to start/end"),
+        help_line("Ctrl+d/u", "Page down/up"),
         Line::from(""),
-        Line::from(Span::styled(
-            format!("{} FILE BROWSER", BoxChars::TRIANGLE_RIGHT),
-            Style::default()
-                .fg(HackerTheme::SYNTAX_SECTION)
-                .add_modifier(Modifier::BOLD),
-        )),
-        help_line("Enter", "Open file / Toggle dir"),
-        help_line("Space", "Expand/collapse dir"),
-        help_line("R", "Refresh tree"),
-        help_line("/", "Search files"),
-        help_line("f / F", "Filter / Clear filter"),
-        help_line("p / P", "Copy / Paste file"),
-        help_line("n", "Rename file"),
-        help_line("[ / ]", "Resize sidebar"),
+        section_header("Files"),
+        help_line("Enter", "Open file"),
+        help_line("Space", "Expand/collapse"),
+        help_line("R", "Refresh"),
+        help_line("f/F", "Filter / Clear"),
+        help_line("p/P", "Copy / Paste file"),
+        help_line("n", "Rename"),
+        help_line("[/]", "Resize sidebar"),
         Line::from(""),
-        Line::from(Span::styled(
-            format!("{} ACTIONS", BoxChars::TRIANGLE_RIGHT),
-            Style::default()
-                .fg(HackerTheme::SYNTAX_SECTION)
-                .add_modifier(Modifier::BOLD),
-        )),
-        help_line("r", "Execute request"),
-        help_line("W", "Run & write output to file"),
-        help_line("e", "Edit mode (vim)"),
-        help_line("v", "Variables panel"),
+        section_header("Actions"),
+        help_line("r", "Run request"),
+        help_line("W", "Run & write output"),
+        help_line("e", "Edit mode"),
+        help_line("v", "Variables"),
         help_line("E", "Cycle environment"),
-        help_line("1/2", "Editor: Hurl/Output tab"),
-        help_line("1/2/3", "Response: Body/Headers/Raw"),
-        help_line("y / Y", "Copy path / response"),
-        help_line("c / C", "Copy AI context / command"),
-        help_line("o", "Output context & quit"),
+        help_line("1/2", "Editor tabs"),
+        help_line("1/2/3", "Response tabs"),
         Line::from(""),
-        Line::from(Span::styled(
-            format!("{} VIM EDIT MODE", BoxChars::TRIANGLE_RIGHT),
-            Style::default()
-                .fg(HackerTheme::SYNTAX_SECTION)
-                .add_modifier(Modifier::BOLD),
-        )),
-        help_line("h/j/k/l", "Move cursor"),
-        help_line("w/b/e", "Word motions"),
-        help_line("0/$/^", "Line start/end"),
-        help_line("i/a/I/A", "Insert mode"),
-        help_line("o/O", "Open line below/above"),
-        help_line("x/d/D", "Delete char/line/to-end"),
-        help_line("Esc", "Back to normal mode"),
+        section_header("Clipboard"),
+        help_line("y", "Copy path"),
+        help_line("Y", "Copy response"),
+        help_line("c", "Copy AI context"),
+        help_line("C", "Copy hurl command"),
         Line::from(""),
-        Line::from(Span::styled(
-            format!("{} COMMANDS", BoxChars::TRIANGLE_RIGHT),
-            Style::default()
-                .fg(HackerTheme::SYNTAX_SECTION)
-                .add_modifier(Modifier::BOLD),
-        )),
-        help_line(":w", "Save file"),
+        section_header("Commands"),
+        help_line(":w", "Save"),
         help_line(":q", "Quit"),
-        help_line(":wq", "Save and quit"),
+        help_line(":wq", "Save & quit"),
         Line::from(""),
         Line::from(Span::styled(
-            format!("{} GENERAL", BoxChars::TRIANGLE_RIGHT),
-            Style::default()
-                .fg(HackerTheme::SYNTAX_SECTION)
-                .add_modifier(Modifier::BOLD),
-        )),
-        help_line("?", "Toggle help"),
-        help_line("q", "Quit / Close"),
-        help_line("Esc", "Cancel / Exit mode"),
-        help_line("^c", "Force quit"),
-        Line::from(""),
-        Line::from(Span::styled(
-            format!(
-                "{} Press [q] or [?] to close {}",
-                BoxChars::DOT,
-                BoxChars::DOT
-            ),
+            "  Press q or ? to close",
             Style::default().fg(HackerTheme::TEXT_MUTED),
         )),
     ];
@@ -139,20 +82,27 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
     frame.render_widget(paragraph, area);
 }
 
+/// Section header
+fn section_header(title: &str) -> Line<'static> {
+    Line::from(Span::styled(
+        format!("  {}", title),
+        Style::default()
+            .fg(HackerTheme::SYNTAX_SECTION)
+            .add_modifier(Modifier::BOLD),
+    ))
+}
+
 /// Create a help line with key and description
 fn help_line(key: &str, desc: &str) -> Line<'static> {
     Line::from(vec![
+        Span::styled("    ", Style::default()),
         Span::styled(
-            format!("  {} ", BoxChars::DOT),
-            Style::default().fg(HackerTheme::TEXT_MUTED),
-        ),
-        Span::styled(
-            format!("{:14}", key),
+            format!("{:12}", key),
             Style::default().fg(HackerTheme::MATRIX_GREEN),
         ),
         Span::styled(
             desc.to_string(),
-            Style::default().fg(HackerTheme::TEXT_PRIMARY),
+            Style::default().fg(HackerTheme::TEXT_SECONDARY),
         ),
     ])
 }

@@ -1,6 +1,6 @@
 //! File browser panel
 //!
-//! Displays the file tree of .hurl files with hacker terminal aesthetic.
+//! Displays the file tree of .hurl files with clean modern aesthetic.
 
 use ratatui::{
     layout::Rect,
@@ -10,7 +10,7 @@ use ratatui::{
     Frame,
 };
 
-use super::theme::{BoxChars, HackerTheme};
+use super::theme::HackerTheme;
 use crate::app::{ActivePanel, App, AppMode};
 
 /// Render the file browser panel
@@ -18,21 +18,13 @@ pub fn render_file_browser(frame: &mut Frame, app: &mut App, area: Rect) {
     let is_active = app.active_panel == ActivePanel::FileBrowser;
     let is_filtering = app.mode == AppMode::Filter;
 
-    // Build title with filter indicator
+    // Build title with filter indicator - clean style
     let title = if is_filtering {
-        format!(
-            " {} Files [>{}|] ",
-            BoxChars::TRIANGLE_RIGHT,
-            app.filter_query
-        )
+        format!(" Files: {}_ ", app.filter_query)
     } else if !app.filter_query.is_empty() {
-        format!(
-            " {} Files [>{}] ",
-            BoxChars::TRIANGLE_RIGHT,
-            app.filter_query
-        )
+        format!(" Files: {} ", app.filter_query)
     } else {
-        format!(" {} Files ", BoxChars::TRIANGLE_RIGHT)
+        " Files ".to_string()
     };
 
     let border_color = if is_filtering {
@@ -60,32 +52,29 @@ pub fn render_file_browser(frame: &mut Frame, app: &mut App, area: Rect) {
         .enumerate()
         .map(|(idx, entry)| {
             let indent = "  ".repeat(entry.depth);
+
+            // Clean minimal icons
             let icon = if entry.is_dir {
                 if entry.is_expanded {
-                    format!("{} ", BoxChars::TRIANGLE_DOWN)
+                    "▾ "
                 } else {
-                    format!("{} ", BoxChars::TRIANGLE_RIGHT)
+                    "▸ "
                 }
             } else {
-                format!("{} ", BoxChars::DOT)
+                "  "
             };
 
-            let dir_icon = if entry.is_dir {
-                format!("{} ", BoxChars::DIAMOND)
-            } else {
-                "".to_string()
-            };
+            let dir_marker = if entry.is_dir { "/" } else { "" };
 
             let name = &entry.name;
-            let display = format!("{}{}{}{}", indent, icon, dir_icon, name);
+            let display = format!("{}{}{}{}", indent, icon, name, dir_marker);
 
             let style = if idx == app.file_tree_index {
                 Style::default()
                     .fg(HackerTheme::SELECTED_FG)
                     .bg(HackerTheme::SELECTED_BG)
-                    .add_modifier(Modifier::BOLD)
             } else if entry.is_dir {
-                Style::default().fg(HackerTheme::CYBER_CYAN_DIM)
+                Style::default().fg(HackerTheme::CYBER_CYAN)
             } else {
                 Style::default().fg(HackerTheme::TEXT_PRIMARY)
             };

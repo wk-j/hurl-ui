@@ -208,23 +208,23 @@ pub fn render_response(frame: &mut Frame, app: &App, area: Rect) {
     let status_paragraph = Paragraph::new(status_line);
     frame.render_widget(status_paragraph, chunks[0]);
 
-    // Render tabs
+    // Render tabs - clean style
     let tab_titles = vec![
-        format!("[1] Body"),
-        format!("[2] Headers ({})", response.headers.len()),
-        format!("[3] Raw"),
+        format!(" Body "),
+        format!(" Headers ({}) ", response.headers.len()),
+        format!(" Raw "),
     ];
     let tabs = Tabs::new(tab_titles)
         .select(app.response_tab.index())
         .style(Style::default().fg(HackerTheme::TEXT_MUTED))
         .highlight_style(
             Style::default()
-                .fg(HackerTheme::MATRIX_GREEN)
+                .fg(HackerTheme::TEXT_PRIMARY)
                 .add_modifier(Modifier::BOLD),
         )
         .divider(Span::styled(
-            " | ",
-            Style::default().fg(HackerTheme::TEXT_MUTED),
+            "│",
+            Style::default().fg(HackerTheme::BORDER_DIM),
         ));
 
     frame.render_widget(tabs, chunks[1]);

@@ -1,7 +1,7 @@
 //! Status bar
 //!
 //! Displays the bottom status bar with mode, shortcuts, and messages.
-//! Hacker terminal aesthetic with matrix-inspired colors.
+//! Clean modern aesthetic.
 
 use ratatui::{
     layout::Rect,
@@ -11,52 +11,49 @@ use ratatui::{
     Frame,
 };
 
-use super::theme::{BoxChars, HackerTheme};
+use super::theme::HackerTheme;
 use crate::app::{App, AppMode, StatusLevel, VimMode};
 
 /// Render the status bar
 pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     let mut spans: Vec<Span> = Vec::new();
 
-    // Mode indicator with hacker styling
+    // Mode indicator - clean minimal style
     match app.mode {
         AppMode::Normal => {
             spans.push(Span::styled(
-                format!(" {} NORMAL ", BoxChars::TERMINAL_PROMPT),
+                " NORMAL ",
                 Style::default()
                     .fg(HackerTheme::MODE_NORMAL_FG)
-                    .bg(HackerTheme::MODE_NORMAL_BG)
-                    .add_modifier(Modifier::BOLD),
+                    .bg(HackerTheme::MODE_NORMAL_BG),
             ));
         }
         AppMode::Editing => {
-            // Show vim sub-mode (NORMAL or INSERT)
             let (vim_label, fg, bg) = match app.vim_mode {
                 VimMode::Normal => (
-                    "NORMAL",
+                    " NORMAL ",
                     HackerTheme::MODE_NORMAL_FG,
                     HackerTheme::MODE_NORMAL_BG,
                 ),
                 VimMode::Insert => (
-                    "INSERT",
+                    " INSERT ",
                     HackerTheme::MODE_EDIT_FG,
                     HackerTheme::MODE_EDIT_BG,
                 ),
             };
-            spans.push(Span::styled(
-                format!(" {} {} ", BoxChars::SCANNER, vim_label),
-                Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
-            ));
+            spans.push(Span::styled(vim_label, Style::default().fg(fg).bg(bg)));
         }
         AppMode::Search => {
             spans.push(Span::styled(
-                format!(" {} SEARCH ", BoxChars::BULLET),
+                " SEARCH ",
                 Style::default()
                     .fg(HackerTheme::MODE_SEARCH_FG)
-                    .bg(HackerTheme::MODE_SEARCH_BG)
-                    .add_modifier(Modifier::BOLD),
+                    .bg(HackerTheme::MODE_SEARCH_BG),
             ));
-            spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
+            spans.push(Span::styled(
+                "  ",
+                Style::default().bg(HackerTheme::DARK_BG),
+            ));
             spans.push(Span::styled(
                 format!("/{}_", app.search_query),
                 Style::default()
@@ -66,13 +63,15 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         }
         AppMode::Command => {
             spans.push(Span::styled(
-                format!(" {} CMD ", BoxChars::LAMBDA),
+                " COMMAND ",
                 Style::default()
                     .fg(HackerTheme::MODE_COMMAND_FG)
-                    .bg(HackerTheme::MODE_COMMAND_BG)
-                    .add_modifier(Modifier::BOLD),
+                    .bg(HackerTheme::MODE_COMMAND_BG),
             ));
-            spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
+            spans.push(Span::styled(
+                "  ",
+                Style::default().bg(HackerTheme::DARK_BG),
+            ));
             spans.push(Span::styled(
                 format!(":{}_", app.command_input),
                 Style::default()
@@ -82,15 +81,17 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         }
         AppMode::Filter => {
             spans.push(Span::styled(
-                format!(" {} FILTER ", BoxChars::GLITCH_2),
+                " FILTER ",
                 Style::default()
                     .fg(HackerTheme::MODE_FILTER_FG)
-                    .bg(HackerTheme::MODE_FILTER_BG)
-                    .add_modifier(Modifier::BOLD),
+                    .bg(HackerTheme::MODE_FILTER_BG),
             ));
-            spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
             spans.push(Span::styled(
-                format!(">{}_", app.filter_query),
+                "  ",
+                Style::default().bg(HackerTheme::DARK_BG),
+            ));
+            spans.push(Span::styled(
+                format!("{}_", app.filter_query),
                 Style::default()
                     .fg(HackerTheme::AMBER_WARNING)
                     .bg(HackerTheme::DARK_BG),
@@ -98,13 +99,15 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         }
         AppMode::Rename => {
             spans.push(Span::styled(
-                format!(" {} RENAME ", BoxChars::SCANNER),
+                " RENAME ",
                 Style::default()
                     .fg(HackerTheme::MODE_EDIT_FG)
-                    .bg(HackerTheme::MODE_EDIT_BG)
-                    .add_modifier(Modifier::BOLD),
+                    .bg(HackerTheme::MODE_EDIT_BG),
             ));
-            spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
+            spans.push(Span::styled(
+                "  ",
+                Style::default().bg(HackerTheme::DARK_BG),
+            ));
             spans.push(Span::styled(
                 format!("{}_", app.rename_input),
                 Style::default()
@@ -114,75 +117,46 @@ pub fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    spans.push(Span::styled(" ", Style::default().bg(HackerTheme::DARK_BG)));
+    spans.push(Span::styled(
+        "  ",
+        Style::default().bg(HackerTheme::DARK_BG),
+    ));
 
-    // Status message with cyber colors
+    // Status message
     if let Some((message, level)) = &app.status_message {
         let color = match level {
-            StatusLevel::Info => HackerTheme::TEXT_PRIMARY,
+            StatusLevel::Info => HackerTheme::TEXT_SECONDARY,
             StatusLevel::Success => HackerTheme::NEON_GREEN,
             StatusLevel::Warning => HackerTheme::AMBER_WARNING,
             StatusLevel::Error => HackerTheme::NEON_RED,
         };
-        let prefix = match level {
-            StatusLevel::Info => format!("{} ", BoxChars::DOT),
-            StatusLevel::Success => format!("{} ", BoxChars::CHECK),
-            StatusLevel::Warning => format!("{} ", BoxChars::DIAMOND),
-            StatusLevel::Error => format!("{} ", BoxChars::CROSS),
-        };
         spans.push(Span::styled(
-            format!("{}{}", prefix, message),
+            message.clone(),
             Style::default().fg(color).bg(HackerTheme::DARK_BG),
         ));
     }
 
-    // Running indicator with animated spinner
+    // Running indicator
     if app.is_running {
-        let spinner = BoxChars::spinner(app.spinner_frame);
-        let matrix_char = BoxChars::spinner_matrix(app.spinner_frame);
+        let spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let spinner = spinner_chars[app.spinner_frame % spinner_chars.len()];
 
         spans.push(Span::styled(
-            format!(" {} ", spinner),
-            Style::default()
-                .fg(HackerTheme::MATRIX_GREEN_BRIGHT)
-                .bg(HackerTheme::DARK_BG)
-                .add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::styled(
-            "EXECUTING",
+            format!("  {} Running...", spinner),
             Style::default()
                 .fg(HackerTheme::RUNNING)
-                .bg(HackerTheme::DARK_BG)
-                .add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::styled(
-            format!(" {} ", matrix_char),
-            Style::default()
-                .fg(HackerTheme::CYBER_CYAN)
-                .bg(HackerTheme::DARK_BG)
-                .add_modifier(Modifier::BOLD),
+                .bg(HackerTheme::DARK_BG),
         ));
     }
 
-    // Right-aligned shortcuts with hacker style
+    // Right-aligned hints - minimal
     let shortcuts = match app.mode {
-        AppMode::Normal => format!(
-            " [r]un {} [e]dit {} [v]ars {} [?]help {} [q]uit ",
-            BoxChars::DOT,
-            BoxChars::DOT,
-            BoxChars::DOT,
-            BoxChars::DOT
-        ),
+        AppMode::Normal => " r:run  e:edit  ?:help  q:quit ",
         AppMode::Editing => match app.vim_mode {
-            VimMode::Normal => format!(
-                " [i]nsert {} [a]ppend {} [o]pen {} [q]uit ",
-                BoxChars::DOT,
-                BoxChars::DOT,
-                BoxChars::DOT
-            ),
-            VimMode::Insert => format!(" [Esc] {} normal mode ", BoxChars::ARROW_RIGHT),
+            VimMode::Normal => " i:insert  q:quit ",
+            VimMode::Insert => " Esc:normal ",
         },
-        _ => format!(" [Esc] {} back ", BoxChars::ARROW_RIGHT),
+        _ => " Esc:back ",
     };
 
     // Calculate padding

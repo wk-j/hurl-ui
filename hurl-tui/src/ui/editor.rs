@@ -52,25 +52,23 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
         ])
         .split(area);
 
-    // Render tabs
+    // Render tabs - clean minimal style
     let tab_titles = vec![
         Span::styled(
-            " 1:Hurl ",
+            " Hurl ",
             if app.editor_tab == EditorTab::Hurl {
                 Style::default()
-                    .fg(HackerTheme::VOID_BLACK)
-                    .bg(HackerTheme::MATRIX_GREEN)
+                    .fg(HackerTheme::TEXT_PRIMARY)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(HackerTheme::TEXT_MUTED)
             },
         ),
         Span::styled(
-            " 2:Output ",
+            " Output ",
             if app.editor_tab == EditorTab::Output {
                 Style::default()
-                    .fg(HackerTheme::VOID_BLACK)
-                    .bg(HackerTheme::MATRIX_GREEN)
+                    .fg(HackerTheme::TEXT_PRIMARY)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(HackerTheme::TEXT_MUTED)
@@ -81,7 +79,7 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
     let tabs = Tabs::new(tab_titles)
         .style(Style::default().bg(HackerTheme::VOID_BLACK))
         .divider(Span::styled(
-            " ",
+            "│",
             Style::default().fg(HackerTheme::BORDER_DIM),
         ))
         .select(app.editor_tab.index());
