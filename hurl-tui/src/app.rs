@@ -93,11 +93,19 @@ struct PersistedState {
     /// Sidebar width percentage (default 20)
     #[serde(default = "default_sidebar_width")]
     sidebar_width: u16,
+    /// Whether to show the assertions panel (default true)
+    #[serde(default = "default_show_assertions")]
+    show_assertions: bool,
 }
 
 /// Default sidebar width percentage
 fn default_sidebar_width() -> u16 {
     20
+}
+
+/// Default show assertions state
+fn default_show_assertions() -> bool {
+    true
 }
 
 /// Active panel in the UI
@@ -324,6 +332,9 @@ pub struct App {
 
     /// Sidebar width percentage (10-50)
     pub sidebar_width: u16,
+
+    /// Whether to show the assertions panel
+    pub show_assertions: bool,
 }
 
 impl App {
@@ -373,6 +384,7 @@ impl App {
             editor_tab: EditorTab::Hurl,
             output_scroll: 0,
             sidebar_width: default_sidebar_width(),
+            show_assertions: true,
         };
 
         // Load file tree and restore state (including expanded folders and sidebar width)
@@ -534,6 +546,7 @@ impl App {
                 .map(|p| p.to_string_lossy().to_string()),
             expanded_folders: self.collect_expanded_folders(),
             sidebar_width: self.sidebar_width,
+            show_assertions: self.show_assertions,
         };
 
         tracing::debug!(
@@ -572,6 +585,9 @@ impl App {
 
             // Restore sidebar width
             self.sidebar_width = state.sidebar_width.clamp(10, 50);
+
+            // Restore assertions visibility
+            self.show_assertions = state.show_assertions;
 
             // Note: Environment restoration happens in restore_selected_environment()
             // after load_environments() populates the environments list
@@ -911,6 +927,11 @@ impl App {
                 self.resize_sidebar(2);
             }
 
+            // Toggle assertions panel visibility
+            KeyCode::Char('A') => {
+                self.toggle_assertions_panel();
+            }
+
             _ => {}
         }
 
@@ -1163,7 +1184,13 @@ impl App {
         self.active_panel = match self.active_panel {
             ActivePanel::FileBrowser => ActivePanel::Editor,
             ActivePanel::Editor => ActivePanel::Response,
-            ActivePanel::Response => ActivePanel::Assertions,
+            ActivePanel::Response => {
+                if self.show_assertions {
+                    ActivePanel::Assertions
+                } else {
+                    ActivePanel::Variables
+                }
+            }
             ActivePanel::Assertions => ActivePanel::Variables,
             ActivePanel::Variables => ActivePanel::FileBrowser,
         };
@@ -1180,7 +1207,13 @@ impl App {
             ActivePanel::Editor => ActivePanel::FileBrowser,
             ActivePanel::Response => ActivePanel::Editor,
             ActivePanel::Assertions => ActivePanel::Response,
-            ActivePanel::Variables => ActivePanel::Assertions,
+            ActivePanel::Variables => {
+                if self.show_assertions {
+                    ActivePanel::Assertions
+                } else {
+                    ActivePanel::Response
+                }
+            }
         };
         if old_panel != self.active_panel {
             self.trigger_panel_focus_effect();
@@ -1883,6 +1916,24 @@ impl App {
         }
     }
 
+    /// Toggle assertions panel visibility
+    fn toggle_assertions_panel(&mut self) {
+        self.show_assertions = !self.show_assertions;
+
+        // If assertions panel was active and is now hidden, move to Response panel
+        if !self.show_assertions && self.active_panel == ActivePanel::Assertions {
+            self.active_panel = ActivePanel::Response;
+        }
+
+        let status = if self.show_assertions {
+            "Assertions panel visible"
+        } else {
+            "Assertions panel hidden"
+        };
+        self.set_status(status, StatusLevel::Info);
+        self.save_state();
+    }
+
     /// Copy current file's relative path to clipboard
     fn copy_current_file_path(&mut self) {
         if let Some(path) = &self.current_file_path {
@@ -2390,103 +2441,9 @@ impl App {
         }
     }
 
-    /// Copy full test context for AI (request + response + assertions)
+    /// Copy full test context for AI (request + response + assertions + errors)
     fn copy_ai_context(&mut self) {
-        let mut context = String::new();
-
-        // Add file path
-        if let Some(path) = &self.current_file_path {
-            let relative_path = path
-                .strip_prefix(&self.working_dir)
-                .unwrap_or(path)
-                .to_string_lossy();
-            context.push_str(&format!("## Hurl Test: {}\n\n", relative_path));
-        }
-
-        // Add request (hurl file content)
-        if !self.editor_content.is_empty() {
-            context.push_str("### Request (Hurl file)\n\n```hurl\n");
-            context.push_str(&self.editor_content.join("\n"));
-            context.push_str("\n```\n\n");
-        }
-
-        // Add response
-        if let Some(result) = &self.execution_result {
-            if let Some(response) = &result.response {
-                context.push_str(&format!(
-                    "### Response\n\n**Status:** {}\n**Duration:** {}ms\n\n",
-                    response.status_code, response.duration_ms
-                ));
-
-                // Headers
-                if !response.headers.is_empty() {
-                    context.push_str("**Headers:**\n```\n");
-                    for (name, value) in &response.headers {
-                        context.push_str(&format!("{}: {}\n", name, value));
-                    }
-                    context.push_str("```\n\n");
-                }
-
-                // Body
-                if !response.body.is_empty() {
-                    context.push_str("**Body:**\n```json\n");
-                    // Try to pretty print JSON
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response.body) {
-                        if let Ok(pretty) = serde_json::to_string_pretty(&json) {
-                            context.push_str(&pretty);
-                        } else {
-                            context.push_str(&response.body);
-                        }
-                    } else {
-                        context.push_str(&response.body);
-                    }
-                    context.push_str("\n```\n\n");
-                }
-            }
-
-            // Assertions
-            if !result.assertions.is_empty() {
-                context.push_str("### Assertion Results\n\n");
-                let passed = result.assertions.iter().filter(|a| a.success).count();
-                let total = result.assertions.len();
-                context.push_str(&format!("**Summary:** {}/{} passed\n\n", passed, total));
-
-                context.push_str("| Status | Assertion |\n");
-                context.push_str("|--------|----------|\n");
-                for assertion in &result.assertions {
-                    let status = if assertion.success { "PASS" } else { "FAIL" };
-                    context.push_str(&format!("| {} | {} |\n", status, assertion.text));
-                }
-                context.push_str("\n");
-
-                // Add failure details
-                let failures: Vec<_> = result.assertions.iter().filter(|a| !a.success).collect();
-                if !failures.is_empty() {
-                    context.push_str("**Failures:**\n\n");
-                    for failure in failures {
-                        context.push_str(&format!("- `{}`\n", failure.text));
-                        if let Some(expected) = &failure.expected {
-                            context.push_str(&format!("  - Expected: {}\n", expected));
-                        }
-                        if let Some(actual) = &failure.actual {
-                            context.push_str(&format!("  - Actual: {}\n", actual));
-                        }
-                        if let Some(message) = &failure.message {
-                            context.push_str(&format!("  - Error: {}\n", message));
-                        }
-                    }
-                    context.push_str("\n");
-                }
-            }
-
-            // Overall result
-            context.push_str(&format!(
-                "### Result: {}\n",
-                if result.success { "SUCCESS" } else { "FAILED" }
-            ));
-        } else {
-            context.push_str("### Response\n\n*No response yet - request not executed*\n");
-        }
+        let context = self.build_ai_context();
 
         if context.is_empty() {
             self.set_status("No context to copy", StatusLevel::Warning);
@@ -2526,6 +2483,22 @@ impl App {
             context.push_str("\n```\n\n");
         }
 
+        // Add environment file content (if selected)
+        if let Some(env_path) = &self.current_env_file {
+            if let Ok(env_content) = std::fs::read_to_string(env_path) {
+                let env_name = env_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "env".to_string());
+                context.push_str(&format!("### Environment: {}\n\n```env\n", env_name));
+                context.push_str(&env_content);
+                if !env_content.ends_with('\n') {
+                    context.push_str("\n");
+                }
+                context.push_str("```\n\n");
+            }
+        }
+
         // Add response
         if let Some(result) = &self.execution_result {
             if let Some(response) = &result.response {
@@ -2592,6 +2565,13 @@ impl App {
                     }
                     context.push_str("\n");
                 }
+            }
+
+            // Add stderr errors if present (e.g., undefined variables, parse errors)
+            if !result.stderr.is_empty() && !result.success {
+                context.push_str("### Errors\n\n```\n");
+                context.push_str(&result.stderr);
+                context.push_str("```\n\n");
             }
 
             // Overall result

@@ -50,6 +50,8 @@ cargo install --path hurl-tui
 | `P` | Paste file |
 | `n` | Rename file |
 | `Tab` | Cycle panels |
+| `[/]` | Resize sidebar |
+| `A` | Toggle assertions panel |
 | `y` | Copy file path |
 | `Y` | Copy response |
 | `c` | Copy AI context |

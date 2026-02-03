@@ -20,14 +20,17 @@ pub use assertions::render_assertions;
 pub use editor::{render_editor, EditorTab};
 pub use file_browser::render_file_browser;
 pub use help::render_help;
-pub use layout::{create_layout, AppLayout};
+pub use layout::{create_layout, AppLayout, PanelVisibility};
 pub use response::{render_response, ResponseTab};
 pub use status_bar::render_status_bar;
 pub use variables::render_variables;
 
 /// Main draw function that renders the entire UI
 pub fn draw(frame: &mut Frame, app: &mut App) {
-    let layout = create_layout(frame.area(), app.sidebar_width);
+    let visibility = PanelVisibility {
+        show_assertions: app.show_assertions,
+    };
+    let layout = create_layout(frame.area(), app.sidebar_width, &visibility);
 
     // Render file browser (left panel)
     render_file_browser(frame, app, layout.file_browser);
@@ -41,8 +44,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Render response (bottom center)
     render_response(frame, app, layout.response);
 
-    // Render assertions (bottom right)
-    render_assertions(frame, app, layout.assertions);
+    // Render assertions (bottom right) - only if visible
+    if app.show_assertions {
+        render_assertions(frame, app, layout.assertions);
+    }
 
     // Render status bar (bottom)
     render_status_bar(frame, app, layout.status_bar);

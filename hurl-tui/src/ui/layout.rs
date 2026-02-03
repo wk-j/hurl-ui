@@ -20,8 +20,15 @@ pub struct AppLayout {
     pub status_bar: Rect,
 }
 
-/// Create the application layout with configurable sidebar width
-pub fn create_layout(area: Rect, sidebar_width: u16) -> AppLayout {
+/// Panel visibility options
+#[derive(Default)]
+pub struct PanelVisibility {
+    /// Whether to show the assertions panel
+    pub show_assertions: bool,
+}
+
+/// Create the application layout with configurable sidebar width and panel visibility
+pub fn create_layout(area: Rect, sidebar_width: u16, visibility: &PanelVisibility) -> AppLayout {
     // Clamp sidebar width to reasonable bounds (10-50%)
     let sidebar_pct = sidebar_width.clamp(10, 50);
     let main_pct = 100 - sidebar_pct;
@@ -74,17 +81,20 @@ pub fn create_layout(area: Rect, sidebar_width: u16) -> AppLayout {
     let editor = main_vertical_chunks[0];
     let results_area = main_vertical_chunks[1];
 
-    // Results area split: response and assertions
-    let results_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(60), // Response
-            Constraint::Percentage(40), // Assertions
-        ])
-        .split(results_area);
-
-    let response = results_chunks[0];
-    let assertions = results_chunks[1];
+    // Results area split: response and assertions (if visible)
+    let (response, assertions) = if visibility.show_assertions {
+        let results_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(60), // Response
+                Constraint::Percentage(40), // Assertions
+            ])
+            .split(results_area);
+        (results_chunks[0], results_chunks[1])
+    } else {
+        // Assertions hidden - response takes full width
+        (results_area, Rect::default())
+    };
 
     AppLayout {
         file_browser,

@@ -48,6 +48,7 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
         help_line("p/P", "Copy / Paste file"),
         help_line("n", "Rename"),
         help_line("[/]", "Resize sidebar"),
+        help_line("A", "Toggle assertions"),
         Line::from(""),
         section_header("Actions"),
         help_line("r", "Run request"),

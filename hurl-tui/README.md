@@ -82,6 +82,8 @@ hurl-tui /path/to/hurl/files
 | `p` | Copy file (for paste) |
 | `P` | Paste copied file |
 | `n` | Rename file |
+| `[` / `]` | Resize sidebar |
+| `A` | Toggle assertions panel |
 | `:` | Command mode |
 | `?` | Show help |
 | `q` | Quit |
