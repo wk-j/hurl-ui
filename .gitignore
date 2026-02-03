@@ -73,3 +73,6 @@ lcov.info
 
 # Hurl TUI state files
 .hurl-tui-state.json
+
+# Hurl TUI output files
+*.output
