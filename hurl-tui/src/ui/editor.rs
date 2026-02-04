@@ -299,21 +299,21 @@ fn render_output_content(frame: &mut Frame, app: &App, area: Rect, is_active: bo
             let inner_height = area.height.saturating_sub(2) as usize;
             let scroll = app.output_scroll;
 
-            // Build lines with line numbers
-            let lines: Vec<Line> = content
-                .lines()
+            // Build lines with line numbers and syntax highlighting
+            let highlighted_lines = highlight_output_content(&content);
+            let lines: Vec<Line> = highlighted_lines
+                .iter()
                 .enumerate()
                 .skip(scroll)
                 .take(inner_height)
-                .map(|(line_num, line_content)| {
+                .map(|(line_num, styled_spans)| {
                     let line_number = format!("{:4} {} ", line_num + 1, BoxChars::VERTICAL);
-                    Line::from(vec![
-                        Span::styled(line_number, Style::default().fg(HackerTheme::TEXT_MUTED)),
-                        Span::styled(
-                            line_content.to_string(),
-                            Style::default().fg(HackerTheme::TEXT_PRIMARY),
-                        ),
-                    ])
+                    let mut spans = vec![Span::styled(
+                        line_number,
+                        Style::default().fg(HackerTheme::TEXT_MUTED),
+                    )];
+                    spans.extend(styled_spans.clone());
+                    Line::from(spans)
                 })
                 .collect();
 
@@ -343,6 +343,183 @@ fn render_output_content(frame: &mut Frame, app: &App, area: Rect, is_active: bo
             frame.render_widget(placeholder, area);
         }
     }
+}
+
+/// Highlight output content (JSON or plain text)
+fn highlight_output_content(content: &str) -> Vec<Vec<Span<'static>>> {
+    let trimmed = content.trim();
+
+    // Try to parse as JSON and pretty-print with highlighting
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Ok(pretty) = serde_json::to_string_pretty(&json) {
+            return pretty
+                .lines()
+                .map(|line| highlight_json_line(line))
+                .collect();
+        }
+    }
+
+    // Try to find and format JSON within the content
+    if let Some(json_start) = trimmed.find(|c| c == '{' || c == '[') {
+        let potential_json = &trimmed[json_start..];
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(potential_json) {
+            if let Ok(pretty) = serde_json::to_string_pretty(&json) {
+                let mut lines: Vec<Vec<Span<'static>>> = Vec::new();
+
+                // Add any prefix content before JSON
+                if json_start > 0 {
+                    for line in trimmed[..json_start].lines() {
+                        lines.push(vec![Span::styled(
+                            line.to_string(),
+                            Style::default().fg(HackerTheme::TEXT_SECONDARY),
+                        )]);
+                    }
+                }
+
+                // Add formatted JSON
+                for line in pretty.lines() {
+                    lines.push(highlight_json_line(line));
+                }
+
+                return lines;
+            }
+        }
+    }
+
+    // Fall back to plain text
+    content
+        .lines()
+        .map(|line| {
+            vec![Span::styled(
+                line.to_string(),
+                Style::default().fg(HackerTheme::TEXT_PRIMARY),
+            )]
+        })
+        .collect()
+}
+
+/// Highlight a single line of JSON
+fn highlight_json_line(line: &str) -> Vec<Span<'static>> {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+
+    let trimmed = line.trim_start();
+    let indent = line.len() - trimmed.len();
+
+    // Add indentation
+    if indent > 0 {
+        spans.push(Span::styled(" ".repeat(indent), Style::default()));
+    }
+
+    // Simple JSON syntax highlighting
+    let mut chars = trimmed.chars().peekable();
+    let mut current = String::new();
+    let mut in_string = false;
+    let mut is_key = true;
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                if in_string {
+                    current.push(ch);
+                    let color = if is_key {
+                        HackerTheme::SYNTAX_HEADER
+                    } else {
+                        HackerTheme::SYNTAX_VALUE
+                    };
+                    spans.push(Span::styled(current.clone(), Style::default().fg(color)));
+                    current.clear();
+                    in_string = false;
+                } else {
+                    if !current.is_empty() {
+                        spans.push(Span::styled(
+                            current.clone(),
+                            Style::default().fg(HackerTheme::TEXT_PRIMARY),
+                        ));
+                        current.clear();
+                    }
+                    current.push(ch);
+                    in_string = true;
+                }
+            }
+            ':' if !in_string => {
+                if !current.is_empty() {
+                    spans.push(Span::styled(
+                        current.clone(),
+                        Style::default().fg(HackerTheme::TEXT_PRIMARY),
+                    ));
+                    current.clear();
+                }
+                spans.push(Span::styled(
+                    ":".to_string(),
+                    Style::default().fg(HackerTheme::TEXT_MUTED),
+                ));
+                is_key = false;
+            }
+            ',' if !in_string => {
+                if !current.is_empty() {
+                    let color = if current.trim().parse::<f64>().is_ok() {
+                        HackerTheme::CYBER_CYAN
+                    } else if current.trim() == "true" || current.trim() == "false" {
+                        HackerTheme::ELECTRIC_PURPLE
+                    } else if current.trim() == "null" {
+                        HackerTheme::TEXT_MUTED
+                    } else {
+                        HackerTheme::TEXT_PRIMARY
+                    };
+                    spans.push(Span::styled(current.clone(), Style::default().fg(color)));
+                    current.clear();
+                }
+                spans.push(Span::styled(
+                    ",".to_string(),
+                    Style::default().fg(HackerTheme::TEXT_MUTED),
+                ));
+                is_key = true;
+            }
+            '{' | '}' | '[' | ']' if !in_string => {
+                if !current.is_empty() {
+                    let color = if current.trim().parse::<f64>().is_ok() {
+                        HackerTheme::CYBER_CYAN
+                    } else if current.trim() == "true" || current.trim() == "false" {
+                        HackerTheme::ELECTRIC_PURPLE
+                    } else if current.trim() == "null" {
+                        HackerTheme::TEXT_MUTED
+                    } else {
+                        HackerTheme::TEXT_PRIMARY
+                    };
+                    spans.push(Span::styled(current.clone(), Style::default().fg(color)));
+                    current.clear();
+                }
+                spans.push(Span::styled(
+                    ch.to_string(),
+                    Style::default()
+                        .fg(HackerTheme::MATRIX_GREEN)
+                        .add_modifier(Modifier::BOLD),
+                ));
+                if ch == '{' || ch == '[' {
+                    is_key = ch == '{';
+                }
+            }
+            _ => {
+                current.push(ch);
+            }
+        }
+    }
+
+    // Handle remaining content
+    if !current.is_empty() {
+        let color = if current.trim().parse::<f64>().is_ok() {
+            HackerTheme::CYBER_CYAN
+        } else if current.trim() == "true" || current.trim() == "false" {
+            HackerTheme::ELECTRIC_PURPLE
+        } else if current.trim() == "null" {
+            HackerTheme::TEXT_MUTED
+        } else {
+            HackerTheme::TEXT_PRIMARY
+        };
+        spans.push(Span::styled(current, Style::default().fg(color)));
+    }
+
+    spans
 }
 
 /// Highlight a Hurl line and return styled spans
