@@ -124,12 +124,16 @@ impl Runner {
                     // Status code is the second part after "< HTTP/x.x"
                     if let Ok(status) = parts[1].parse::<u16>() {
                         status_code = status;
+                        headers.clear();
+                        body_lines.clear();
                         in_response_headers = true;
                         in_response_body = false;
                     } else if parts.len() >= 3 {
                         // Try third part (for "< HTTP/1.1 200 OK" format)
                         if let Ok(status) = parts[2].parse::<u16>() {
                             status_code = status;
+                            headers.clear();
+                            body_lines.clear();
                             in_response_headers = true;
                             in_response_body = false;
                         }

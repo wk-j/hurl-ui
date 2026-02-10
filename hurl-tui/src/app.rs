@@ -96,6 +96,12 @@ struct PersistedState {
     /// Whether to show the assertions panel (default true)
     #[serde(default = "default_show_assertions")]
     show_assertions: bool,
+    /// Whether to show the editor panel (default true)
+    #[serde(default = "default_show_editor")]
+    show_editor: bool,
+    /// Whether to show the response panel (default true)
+    #[serde(default = "default_show_response")]
+    show_response: bool,
 }
 
 /// Default sidebar width percentage
@@ -105,6 +111,16 @@ fn default_sidebar_width() -> u16 {
 
 /// Default show assertions state
 fn default_show_assertions() -> bool {
+    true
+}
+
+/// Default show editor state
+fn default_show_editor() -> bool {
+    true
+}
+
+/// Default show response state
+fn default_show_response() -> bool {
     true
 }
 
@@ -335,6 +351,12 @@ pub struct App {
 
     /// Whether to show the assertions panel
     pub show_assertions: bool,
+
+    /// Whether to show the editor panel
+    pub show_editor: bool,
+
+    /// Whether to show the response panel
+    pub show_response: bool,
 }
 
 impl App {
@@ -385,6 +407,8 @@ impl App {
             output_scroll: 0,
             sidebar_width: default_sidebar_width(),
             show_assertions: true,
+            show_editor: true,
+            show_response: true,
         };
 
         // Load file tree and restore state (including expanded folders and sidebar width)
@@ -547,6 +571,8 @@ impl App {
             expanded_folders: self.collect_expanded_folders(),
             sidebar_width: self.sidebar_width,
             show_assertions: self.show_assertions,
+            show_editor: self.show_editor,
+            show_response: self.show_response,
         };
 
         tracing::debug!(
@@ -586,8 +612,10 @@ impl App {
             // Restore sidebar width
             self.sidebar_width = state.sidebar_width.clamp(10, 50);
 
-            // Restore assertions visibility
+            // Restore panel visibility
             self.show_assertions = state.show_assertions;
+            self.show_editor = state.show_editor;
+            self.show_response = state.show_response;
 
             // Note: Environment restoration happens in restore_selected_environment()
             // after load_environments() populates the environments list
@@ -859,6 +887,11 @@ impl App {
                 self.copy_response();
             }
 
+            // Copy request content (x = extract request)
+            KeyCode::Char('x') => {
+                self.copy_request_content();
+            }
+
             // Run and write output to file (W = write output)
             KeyCode::Char('W') => {
                 self.run_and_write_output().await?;
@@ -930,6 +963,16 @@ impl App {
             // Toggle assertions panel visibility
             KeyCode::Char('A') => {
                 self.toggle_assertions_panel();
+            }
+
+            // Toggle editor panel visibility
+            KeyCode::Char('D') => {
+                self.toggle_editor_panel();
+            }
+
+            // Toggle response panel visibility
+            KeyCode::Char('S') => {
+                self.toggle_response_panel();
             }
 
             _ => {}
@@ -1182,8 +1225,22 @@ impl App {
     fn next_panel(&mut self) {
         let old_panel = self.active_panel;
         self.active_panel = match self.active_panel {
-            ActivePanel::FileBrowser => ActivePanel::Editor,
-            ActivePanel::Editor => ActivePanel::Response,
+            ActivePanel::FileBrowser => {
+                if self.show_editor {
+                    ActivePanel::Editor
+                } else if self.show_response {
+                    ActivePanel::Response
+                } else {
+                    ActivePanel::Variables
+                }
+            }
+            ActivePanel::Editor => {
+                if self.show_response {
+                    ActivePanel::Response
+                } else {
+                    ActivePanel::Variables
+                }
+            }
             ActivePanel::Response => {
                 if self.show_assertions {
                     ActivePanel::Assertions
@@ -1205,13 +1262,23 @@ impl App {
         self.active_panel = match self.active_panel {
             ActivePanel::FileBrowser => ActivePanel::Variables,
             ActivePanel::Editor => ActivePanel::FileBrowser,
-            ActivePanel::Response => ActivePanel::Editor,
+            ActivePanel::Response => {
+                if self.show_editor {
+                    ActivePanel::Editor
+                } else {
+                    ActivePanel::FileBrowser
+                }
+            }
             ActivePanel::Assertions => ActivePanel::Response,
             ActivePanel::Variables => {
                 if self.show_assertions {
                     ActivePanel::Assertions
-                } else {
+                } else if self.show_response {
                     ActivePanel::Response
+                } else if self.show_editor {
+                    ActivePanel::Editor
+                } else {
+                    ActivePanel::FileBrowser
                 }
             }
         };
@@ -1934,6 +2001,70 @@ impl App {
         self.save_state();
     }
 
+    /// Toggle editor panel visibility
+    fn toggle_editor_panel(&mut self) {
+        // Don't allow hiding editor if response is also hidden (must have at least one main panel)
+        if self.show_editor && !self.show_response {
+            self.set_status(
+                "Cannot hide editor: response panel is also hidden",
+                StatusLevel::Warning,
+            );
+            return;
+        }
+
+        self.show_editor = !self.show_editor;
+
+        // If editor panel was active and is now hidden, move to Response panel
+        if !self.show_editor && self.active_panel == ActivePanel::Editor {
+            self.active_panel = ActivePanel::Response;
+        }
+
+        let status = if self.show_editor {
+            "Editor panel visible"
+        } else {
+            "Editor panel hidden"
+        };
+        self.set_status(status, StatusLevel::Info);
+        self.save_state();
+    }
+
+    /// Toggle response panel visibility
+    fn toggle_response_panel(&mut self) {
+        // Don't allow hiding response if editor is also hidden (must have at least one main panel)
+        if self.show_response && !self.show_editor {
+            self.set_status(
+                "Cannot hide response: editor panel is also hidden",
+                StatusLevel::Warning,
+            );
+            return;
+        }
+
+        self.show_response = !self.show_response;
+
+        // If response panel was active and is now hidden, move to Editor panel
+        if !self.show_response && self.active_panel == ActivePanel::Response {
+            self.active_panel = ActivePanel::Editor;
+        }
+
+        // If assertions panel was active and response is now hidden, move to Editor panel
+        if !self.show_response && self.active_panel == ActivePanel::Assertions {
+            self.active_panel = ActivePanel::Editor;
+        }
+
+        // If response is hidden, also hide assertions (they share the results area)
+        if !self.show_response {
+            self.show_assertions = false;
+        }
+
+        let status = if self.show_response {
+            "Response panel visible"
+        } else {
+            "Response panel hidden"
+        };
+        self.set_status(status, StatusLevel::Info);
+        self.save_state();
+    }
+
     /// Copy current file's relative path to clipboard
     fn copy_current_file_path(&mut self) {
         if let Some(path) = &self.current_file_path {
@@ -1957,6 +2088,28 @@ impl App {
             }
         } else {
             self.set_status("No file selected", StatusLevel::Warning);
+        }
+    }
+
+    /// Copy request content (hurl file content) to clipboard
+    fn copy_request_content(&mut self) {
+        if self.editor_content.is_empty() {
+            self.set_status("No request content to copy", StatusLevel::Warning);
+            return;
+        }
+
+        let content = self.editor_content.join("\n");
+        match self.copy_to_clipboard(&content) {
+            Ok(_) => {
+                let line_count = self.editor_content.len();
+                self.set_status(
+                    &format!("Copied request ({} lines)", line_count),
+                    StatusLevel::Success,
+                );
+            }
+            Err(e) => {
+                self.set_status(&format!("Copy failed: {}", e), StatusLevel::Error);
+            }
         }
     }
 

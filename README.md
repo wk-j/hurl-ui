@@ -52,8 +52,11 @@ cargo install --path hurl-tui
 | `Tab` | Cycle panels |
 | `[/]` | Resize sidebar |
 | `A` | Toggle assertions panel |
+| `D` | Toggle editor panel |
+| `S` | Toggle response panel |
 | `y` | Copy file path |
 | `Y` | Copy response |
+| `x` | Copy request content |
 | `c` | Copy AI context |
 | `o` | Output to stdout & quit |
 | `?` | Help |

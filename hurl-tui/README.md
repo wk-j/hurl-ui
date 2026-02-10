@@ -84,6 +84,8 @@ hurl-tui /path/to/hurl/files
 | `n` | Rename file |
 | `[` / `]` | Resize sidebar |
 | `A` | Toggle assertions panel |
+| `D` | Toggle editor panel |
+| `S` | Toggle response panel |
 | `:` | Command mode |
 | `?` | Show help |
 | `q` | Quit |
@@ -125,6 +127,7 @@ When in edit mode (`e`), the editor uses vim-style keybindings:
 |-----|--------|
 | `y` | Copy file path to clipboard |
 | `Y` | Copy response to clipboard |
+| `x` | Copy request content to clipboard |
 | `W` | Run & write output to file (e.g., `test.hurl` -> `test.output`) |
 | `c` | Copy AI context (request + response + assertions) |
 | `C` | Copy hurl command to clipboard |

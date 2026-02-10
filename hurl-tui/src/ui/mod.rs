@@ -29,23 +29,29 @@ pub use variables::render_variables;
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let visibility = PanelVisibility {
         show_assertions: app.show_assertions,
+        show_editor: app.show_editor,
+        show_response: app.show_response,
     };
     let layout = create_layout(frame.area(), app.sidebar_width, &visibility);
 
     // Render file browser (left panel)
     render_file_browser(frame, app, layout.file_browser);
 
-    // Render editor (top right)
-    render_editor(frame, app, layout.editor);
+    // Render editor (top right) - only if visible
+    if app.show_editor {
+        render_editor(frame, app, layout.editor);
+    }
 
     // Render variables (bottom left)
     render_variables(frame, app, layout.variables);
 
-    // Render response (bottom center)
-    render_response(frame, app, layout.response);
+    // Render response (bottom center) - only if visible
+    if app.show_response {
+        render_response(frame, app, layout.response);
+    }
 
     // Render assertions (bottom right) - only if visible
-    if app.show_assertions {
+    if app.show_assertions && app.show_response {
         render_assertions(frame, app, layout.assertions);
     }
 

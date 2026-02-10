@@ -25,6 +25,10 @@ pub struct AppLayout {
 pub struct PanelVisibility {
     /// Whether to show the assertions panel
     pub show_assertions: bool,
+    /// Whether to show the editor panel
+    pub show_editor: bool,
+    /// Whether to show the response panel
+    pub show_response: bool,
 }
 
 /// Create the application layout with configurable sidebar width and panel visibility
@@ -70,19 +74,43 @@ pub fn create_layout(area: Rect, sidebar_width: u16, visibility: &PanelVisibilit
     let variables = left_chunks[1];
 
     // Main content split: editor (top) and results (bottom)
-    let main_vertical_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(55), // Editor
-            Constraint::Percentage(45), // Results area
-        ])
-        .split(main_content);
-
-    let editor = main_vertical_chunks[0];
-    let results_area = main_vertical_chunks[1];
+    // Adapt based on which panels are visible
+    let (editor, results_area) = match (visibility.show_editor, visibility.show_response) {
+        (true, true) => {
+            // Both visible: standard 55/45 split
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(55), // Editor
+                    Constraint::Percentage(45), // Results area
+                ])
+                .split(main_content);
+            (chunks[0], chunks[1])
+        }
+        (true, false) => {
+            // Editor only: editor takes full height
+            (main_content, Rect::default())
+        }
+        (false, true) => {
+            // Response only: results area takes full height
+            (Rect::default(), main_content)
+        }
+        (false, false) => {
+            // Neither visible (shouldn't happen due to guard, but handle gracefully)
+            // Default to showing both
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+                .split(main_content);
+            (chunks[0], chunks[1])
+        }
+    };
 
     // Results area split: response and assertions (if visible)
-    let (response, assertions) = if visibility.show_assertions {
+    let (response, assertions) = if !visibility.show_response {
+        // Response hidden - both response and assertions get zero rects
+        (Rect::default(), Rect::default())
+    } else if visibility.show_assertions {
         let results_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
