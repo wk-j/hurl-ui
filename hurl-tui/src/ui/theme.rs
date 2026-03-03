@@ -35,10 +35,10 @@ impl HackerTheme {
     pub const NEON_GREEN: Color = Color::Rgb(152, 195, 121);
 
     // === BACKGROUND/BASE COLORS ===
-    /// Deep background
-    pub const VOID_BLACK: Color = Color::Rgb(30, 30, 30);
-    /// Slightly lighter background for panels
-    pub const DARK_BG: Color = Color::Rgb(37, 37, 38);
+    /// Deep background (transparent - inherits terminal background)
+    pub const VOID_BLACK: Color = Color::Reset;
+    /// Slightly lighter background for panels (transparent - inherits terminal background)
+    pub const DARK_BG: Color = Color::Reset;
     /// Surface color for elevated elements
     pub const SURFACE: Color = Color::Rgb(45, 45, 48);
     /// Border color (dim)
