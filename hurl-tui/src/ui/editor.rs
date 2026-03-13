@@ -19,6 +19,7 @@ pub enum EditorTab {
     #[default]
     Hurl,
     Output,
+    Preview,
 }
 
 impl EditorTab {
@@ -26,6 +27,7 @@ impl EditorTab {
         match self {
             EditorTab::Hurl => 0,
             EditorTab::Output => 1,
+            EditorTab::Preview => 2,
         }
     }
 }
@@ -74,6 +76,16 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(HackerTheme::TEXT_MUTED)
             },
         ),
+        Span::styled(
+            " Preview ",
+            if app.editor_tab == EditorTab::Preview {
+                Style::default()
+                    .fg(HackerTheme::TEXT_PRIMARY)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(HackerTheme::TEXT_MUTED)
+            },
+        ),
     ];
 
     let tabs = Tabs::new(tab_titles)
@@ -90,6 +102,7 @@ pub fn render_editor(frame: &mut Frame, app: &App, area: Rect) {
     match app.editor_tab {
         EditorTab::Hurl => render_hurl_content(frame, app, chunks[1], is_active, is_editing),
         EditorTab::Output => render_output_content(frame, app, chunks[1], is_active),
+        EditorTab::Preview => render_preview_content(frame, app, chunks[1], is_active),
     }
 }
 
@@ -343,6 +356,199 @@ fn render_output_content(frame: &mut Frame, app: &App, area: Rect, is_active: bo
             frame.render_widget(placeholder, area);
         }
     }
+}
+
+/// Render the preview content (hurl file with variables resolved)
+fn render_preview_content(frame: &mut Frame, app: &App, area: Rect, is_active: bool) {
+    let border_color = if is_active {
+        HackerTheme::MATRIX_GREEN
+    } else {
+        HackerTheme::BORDER_DIM
+    };
+
+    let env_label = if app.current_environment.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", app.current_environment)
+    };
+
+    let title = format!(" {} Preview{} ", BoxChars::LAMBDA, env_label);
+
+    let block = Block::default()
+        .title(title)
+        .title_style(
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
+        )
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(HackerTheme::VOID_BLACK));
+
+    if app.preview_content.is_empty() {
+        let placeholder = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                format!("  {} No preview available", BoxChars::DOT),
+                Style::default().fg(HackerTheme::TEXT_MUTED),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                format!(
+                    "  {} Open a .hurl file to preview with resolved variables",
+                    BoxChars::ARROW_RIGHT
+                ),
+                Style::default().fg(HackerTheme::TEXT_SECONDARY),
+            )),
+        ])
+        .block(block);
+        frame.render_widget(placeholder, area);
+        return;
+    }
+
+    // Calculate visible area
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let scroll = app.preview_scroll;
+
+    // Build styled lines with line numbers, highlighting resolved variables
+    let lines: Vec<Line> = app
+        .preview_content
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(inner_height)
+        .map(|(line_num, resolved_line)| {
+            let line_number = format!("{:4} {} ", line_num + 1, BoxChars::VERTICAL);
+
+            // Get the original line to detect which parts were replaced
+            let original_line = app
+                .editor_content
+                .get(line_num)
+                .map(|s| s.as_str())
+                .unwrap_or("");
+
+            let styled_content = if original_line != resolved_line {
+                // This line had variable replacements - highlight the resolved values
+                highlight_preview_line(original_line, resolved_line, &app.variables)
+            } else {
+                highlight_hurl_line(resolved_line)
+            };
+
+            let mut spans = vec![Span::styled(
+                line_number,
+                Style::default().fg(HackerTheme::TEXT_MUTED),
+            )];
+            spans.extend(styled_content);
+
+            Line::from(spans)
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false });
+
+    frame.render_widget(paragraph, area);
+}
+
+/// Highlight a preview line, showing resolved variable values in a distinct color.
+/// Compares original (with `{{var}}`) against resolved (with actual values) to
+/// render replaced segments with a special style.
+fn highlight_preview_line(
+    original: &str,
+    resolved: &str,
+    variables: &[crate::app::Variable],
+) -> Vec<Span<'static>> {
+    // Build a list of (placeholder, value) replacements that apply to this line
+    let mut replacements: Vec<(&str, &str)> = Vec::new();
+    for var in variables {
+        let placeholder = format!("{{{{{}}}}}", var.name);
+        if original.contains(&placeholder) {
+            // We need owned strings for the placeholder but can reference the value
+            replacements.push((&var.name, &var.value));
+        }
+    }
+
+    if replacements.is_empty() {
+        // No replacements on this line - use normal highlighting
+        return highlight_hurl_line(resolved);
+    }
+
+    // Walk through the resolved line and highlight the replaced values.
+    // We reconstruct by scanning the original for `{{name}}` positions,
+    // then map those to positions in the resolved string.
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut orig_pos = 0;
+    let mut res_pos = 0;
+
+    while orig_pos < original.len() {
+        // Check if we're at a variable placeholder
+        if original[orig_pos..].starts_with("{{") {
+            // Find the matching variable
+            let mut found = false;
+            for var in variables {
+                let placeholder = format!("{{{{{}}}}}", var.name);
+                if original[orig_pos..].starts_with(&placeholder) {
+                    // Emit any text before this position
+                    // (the text before the placeholder in resolved = text before in original)
+
+                    // Emit the resolved value with special highlighting
+                    let value = &var.value;
+                    if res_pos + value.len() <= resolved.len() {
+                        spans.push(Span::styled(
+                            value.to_string(),
+                            Style::default()
+                                .fg(HackerTheme::MATRIX_GREEN_BRIGHT)
+                                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                        ));
+                        res_pos += value.len();
+                    }
+                    orig_pos += placeholder.len();
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                // Not a known variable, treat as regular text
+                if res_pos < resolved.len() {
+                    let ch = &resolved[res_pos..res_pos + 1];
+                    spans.push(Span::styled(
+                        ch.to_string(),
+                        Style::default().fg(HackerTheme::TEXT_PRIMARY),
+                    ));
+                    res_pos += 1;
+                }
+                orig_pos += 1;
+            }
+        } else {
+            // Regular character - emit from resolved string
+            if res_pos < resolved.len() {
+                // Collect a run of non-variable characters
+                let mut run_end_orig = orig_pos + 1;
+                let mut run_end_res = res_pos + 1;
+                while run_end_orig < original.len()
+                    && !original[run_end_orig..].starts_with("{{")
+                    && run_end_res < resolved.len()
+                {
+                    run_end_orig += 1;
+                    run_end_res += 1;
+                }
+                let segment = &resolved[res_pos..run_end_res];
+                spans.extend(highlight_hurl_spans(segment));
+                orig_pos = run_end_orig;
+                res_pos = run_end_res;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Any remaining text in resolved string
+    if res_pos < resolved.len() {
+        spans.extend(highlight_hurl_spans(&resolved[res_pos..]));
+    }
+
+    spans
 }
 
 /// Highlight output content (JSON or plain text)

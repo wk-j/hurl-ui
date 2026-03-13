@@ -346,6 +346,12 @@ pub struct App {
     /// Output file scroll offset
     pub output_scroll: usize,
 
+    /// Preview content with variables resolved (lines)
+    pub preview_content: Vec<String>,
+
+    /// Preview tab scroll offset
+    pub preview_scroll: usize,
+
     /// Sidebar width percentage (10-50)
     pub sidebar_width: u16,
 
@@ -405,6 +411,8 @@ impl App {
             response_tab: ResponseTab::Body,
             editor_tab: EditorTab::Hurl,
             output_scroll: 0,
+            preview_content: Vec::new(),
+            preview_scroll: 0,
             sidebar_width: default_sidebar_width(),
             show_assertions: true,
             show_editor: true,
@@ -513,6 +521,45 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Replace `{{variable}}` placeholders in content with values from the current environment.
+    /// Returns a new Vec of lines with all known variables resolved.
+    /// Unknown variables are left as-is (still shown as `{{name}}`).
+    fn resolve_variables(&self, lines: &[String]) -> Vec<String> {
+        if self.variables.is_empty() {
+            return lines.to_vec();
+        }
+
+        lines
+            .iter()
+            .map(|line| {
+                let mut resolved = line.clone();
+                for var in &self.variables {
+                    let placeholder = format!("{{{{{}}}}}", var.name);
+                    if resolved.contains(&placeholder) {
+                        resolved = resolved.replace(&placeholder, &var.value);
+                    }
+                }
+                resolved
+            })
+            .collect()
+    }
+
+    /// Update the preview content by resolving variables in the current editor content.
+    /// Called when a file is loaded or the environment changes.
+    pub fn update_preview_content(&mut self) {
+        let is_hurl_file = self
+            .current_file_path
+            .as_ref()
+            .map_or(false, |p| p.extension().map_or(false, |e| e == "hurl"));
+
+        if is_hurl_file {
+            self.preview_content = self.resolve_variables(&self.editor_content);
+        } else {
+            self.preview_content.clear();
+        }
+        self.preview_scroll = 0;
     }
 
     /// Get the state file path for the current working directory
@@ -949,6 +996,10 @@ impl App {
                 if self.active_panel == ActivePanel::Response {
                     self.response_tab = ResponseTab::Raw;
                     self.response_scroll = 0;
+                } else if self.active_panel == ActivePanel::Editor {
+                    // Refresh preview content before switching to tab
+                    self.update_preview_content();
+                    self.editor_tab = EditorTab::Preview;
                 }
             }
 
@@ -1354,6 +1405,11 @@ impl App {
                     EditorTab::Output => {
                         self.output_scroll += 1;
                     }
+                    EditorTab::Preview => {
+                        if self.preview_scroll < self.preview_content.len().saturating_sub(1) {
+                            self.preview_scroll += 1;
+                        }
+                    }
                 }
             }
             ActivePanel::Response => {
@@ -1384,6 +1440,9 @@ impl App {
                     }
                     EditorTab::Output => {
                         self.output_scroll = self.output_scroll.saturating_sub(1);
+                    }
+                    EditorTab::Preview => {
+                        self.preview_scroll = self.preview_scroll.saturating_sub(1);
                     }
                 }
             }
@@ -1422,6 +1481,7 @@ impl App {
                 match self.editor_tab {
                     EditorTab::Hurl => self.editor_scroll = 0,
                     EditorTab::Output => self.output_scroll = 0,
+                    EditorTab::Preview => self.preview_scroll = 0,
                 }
             }
             ActivePanel::Response => self.response_scroll = 0,
@@ -1438,7 +1498,18 @@ impl App {
                 self.file_tree_state.select(Some(self.file_tree_index));
             }
             ActivePanel::Editor => {
-                self.editor_scroll = self.editor_content.len().saturating_sub(1);
+                match self.editor_tab {
+                    EditorTab::Hurl => {
+                        self.editor_scroll = self.editor_content.len().saturating_sub(1);
+                    }
+                    EditorTab::Output => {
+                        // Output scroll doesn't have a known max, just set high
+                        self.output_scroll = usize::MAX / 2;
+                    }
+                    EditorTab::Preview => {
+                        self.preview_scroll = self.preview_content.len().saturating_sub(1);
+                    }
+                }
             }
             _ => {}
         }
@@ -1705,6 +1776,9 @@ impl App {
         self.response_scroll = 0;
         self.assertions_scroll = 0;
 
+        // Generate preview content with variables resolved
+        self.update_preview_content();
+
         if switch_panel {
             self.active_panel = ActivePanel::Editor;
         }
@@ -1752,6 +1826,9 @@ impl App {
             if let Ok(hurl_file) = crate::parser::parse_hurl_file(&content) {
                 self.current_file = Some(hurl_file);
             }
+
+            // Refresh preview content after save
+            self.update_preview_content();
 
             self.set_status("File saved", StatusLevel::Success);
         }
@@ -1966,6 +2043,9 @@ impl App {
             self.current_environment,
             self.current_env_file
         );
+        // Refresh preview content with new environment variables
+        self.update_preview_content();
+
         self.set_status(
             &format!("Environment: {}", self.current_environment),
             StatusLevel::Info,

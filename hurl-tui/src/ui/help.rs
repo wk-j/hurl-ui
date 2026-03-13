@@ -58,7 +58,7 @@ pub fn render_help(frame: &mut Frame, _app: &App) {
         help_line("e", "Edit mode"),
         help_line("v", "Variables"),
         help_line("E", "Cycle environment"),
-        help_line("1/2", "Editor tabs"),
+        help_line("1/2/3", "Editor tabs (Hurl/Output/Preview)"),
         help_line("1/2/3", "Response tabs"),
         Line::from(""),
         section_header("Clipboard"),
